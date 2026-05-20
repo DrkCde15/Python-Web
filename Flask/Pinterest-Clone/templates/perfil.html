@@ -3,7 +3,6 @@
     <title>Pinterest Clone</title>
 </head>
 <body>
-    <h1>Perfil do usuário</h1>
-    <p>Bem-vindo ao seu perfil!</p>
-</body>
-</html>
+    <h1>Perfil do usuário {{ user }}</h1>
+    <p>Bem-vindo ao seu perfil, {{ user }}!</p>
+    <a href="/">Voltar para a página inicial</a> <!-- Outra forma de redirecionamento href="{{ url_for ('index') }} -->

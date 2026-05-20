@@ -6,9 +6,9 @@ app = Flask(__name__)
 def index():
     return render_template('index.html')
 
-@app.route('/perfil')
-def perfil():
-    return render_template('perfil.html')
+@app.route('/perfil/<user>')
+def perfil(user):
+    return render_template('perfil.html', user=user)
 
 if __name__ == '__main__':
     app.run(debug=True)
