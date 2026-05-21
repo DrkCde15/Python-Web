@@ -8,5 +8,7 @@ Perfil do usuário {{ user }}
 <body>
     <h1>Perfil do usuário {{ user }}</h1>
     <p>Bem-vindo ao seu perfil, {{ user }}!</p>
-    <a href="/">Voltar para a página inicial</a> <!-- Outra forma de redirecionamento href="{{ url_for ('index') }} -->
+    <a href="{{ url_for('logout') }}">Sair</a> <!-- Outra forma de redirecionamento href="{{ url_for ('index') }} -->
+    
+    <a href="{{ url_for('excluir_conta') }}" onclick="return confirm('Tem certeza que deseja excluir sua conta? Esta ação não pode ser desfeita.');">Excluir Conta</a>
 {% endblock %}
