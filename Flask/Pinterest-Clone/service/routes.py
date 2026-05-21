@@ -11,7 +11,7 @@ def index():
         user = User.query.filter_by(email=formlogin.email.data).first()
         if user and bc.check_password_hash(user.senha, formlogin.password.data):
             login_user(user, remember=True)
-            return redirect(url_for('perfil', user=user.username))
+            return redirect(url_for('perfil', id=user.id))
     return render_template('index.html', form=formlogin)
 
 @app.route('/criar-conta', methods=['GET', 'POST'])
@@ -28,10 +28,14 @@ def criar_conta():
         return redirect(url_for('index'))
     return render_template('criar_conta.html', form=formcriarconta)
 
-@app.route('/perfil/<user>')
+@app.route('/perfil/<id>')
 @login_required
-def perfil(user):
-    return render_template('perfil.html', user=user)
+def perfil(id):
+    if int(id) == int(current_user.id):
+        return render_template('perfil.html', user=current_user)
+    else:
+        user = User.query.get(id)
+        return render_template('perfil.html', user=user)
 
 @app.route('/logout')
 @login_required
