@@ -1,11 +1,21 @@
 from flask import render_template
 from service import app
-from flask_login import login_required, current_user
+from flask_login import login_required
+from service.forms import LoginForm, CriarContaForm
 
-
-@app.route('/')
+@app.route('/', methods=['GET', 'POST'])
 def index():
-    return render_template('index.html')
+    formlogin = LoginForm()
+    if formlogin.validate_on_submit():
+        pass
+    return render_template('index.html', form=formlogin)
+
+@app.route('/criar-conta', methods=['GET', 'POST'])
+def criar_conta():
+    formcriarconta = CriarContaForm()
+    if formcriarconta.validate_on_submit():
+        pass
+    return render_template('criar_conta.html', form=formcriarconta)
 
 @app.route('/perfil/<user>')
 @login_required
