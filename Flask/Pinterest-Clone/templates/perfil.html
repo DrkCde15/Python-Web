@@ -11,10 +11,19 @@ Perfil do usuário {{ user }}
     <a href="{{ url_for('logout') }}">Sair</a> <!-- Outra forma de redirecionamento href="{{ url_for ('index') }} -->
     
     <a href="{{ url_for('excluir_conta') }}" onclick="return confirm('Tem certeza que deseja excluir sua conta? Esta ação não pode ser desfeita.');">Excluir Conta</a>
+    
+    {% if user.id == current_user.id %}
+        <h2>Upload de Foto</h2>
+        <form method="POST" enctype="multipart/form-data">
+            {{ formfoto.csrf_token() }}
+            {{ formfoto.foto() }}<br>
+            {{ formfoto.submit_button() }}
+        </form>
+    {% endif %}
 
-    {% for f in user.fotos %}
+    {% for foto in user.fotos %}
         <div>
-            <img src="">
+            <img src="{{ url_for('static', filename='foto/' ~ foto.imagem) }}" alt="Foto {{ foto.id }}" width="200">
         </div>
     {% endfor %}
 {% endblock %}

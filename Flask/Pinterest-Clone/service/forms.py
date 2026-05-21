@@ -1,5 +1,5 @@
 from flask_wtf import FlaskForm
-from wtforms import StringField, PasswordField, SubmitField
+from wtforms import StringField, PasswordField, SubmitField, FileField
 from wtforms.validators import DataRequired, Email, EqualTo, ValidationError, Length
 from service.models import User
 
@@ -27,3 +27,8 @@ class CriarContaForm(FlaskForm):
     def validate_confirm_password(self, confirm_password):
         if confirm_password.data != self.password.data:
             raise ValidationError('As senhas não coincidem.')
+        
+class FormFoto(FlaskForm):
+    foto = FileField('Foto', validators=[DataRequired()])
+    submit_button = SubmitField('Upload Foto')
+    

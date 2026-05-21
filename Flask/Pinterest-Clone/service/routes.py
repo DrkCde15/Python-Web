@@ -1,8 +1,10 @@
 from flask import render_template, redirect, url_for
 from service import app, db, bc
 from flask_login import login_required, login_user, logout_user, current_user
-from service.forms import LoginForm, CriarContaForm
+from service.forms import LoginForm, CriarContaForm, FormFoto
 from service.models import User, Foto
+import os
+from werkzeug.utils import secure_filename
 
 @app.route('/', methods=['GET', 'POST'])
 def index():
@@ -28,13 +30,23 @@ def criar_conta():
         return redirect(url_for('index'))
     return render_template('criar_conta.html', form=formcriarconta)
 
-@app.route('/perfil/<id>')
+@app.route('/perfil/<id>', methods=['GET', 'POST'])
 @login_required
 def perfil(id):
     if int(id) == int(current_user.id):
-        return render_template('perfil.html', user=current_user)
+        formfoto = FormFoto()
+        if formfoto.validate_on_submit():
+            foto_file = formfoto.foto.data
+            filename = secure_filename(foto_file.filename)
+            foto_path = os.path.join(app.config['UPLOAD_FOLDER'], filename)
+            os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
+            foto_file.save(foto_path)
+            nova_foto = Foto(imagem=filename, user_id=current_user.id)
+            db.session.add(nova_foto)
+            db.session.commit()
+        return render_template('perfil.html', user=current_user, formfoto=formfoto)
     else:
-        user = User.query.get(id)
+        user = User.query.get(int(id))
         return render_template('perfil.html', user=user)
 
 @app.route('/logout')
