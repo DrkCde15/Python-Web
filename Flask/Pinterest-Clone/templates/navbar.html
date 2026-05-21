@@ -1,0 +1,7 @@
+<nav>
+    <a href="{{ url_for('logout') }}">Sair</a>
+    <a href="{{ url_for('excluir_conta') }}" onclick="return confirm('Tem certeza que deseja excluir sua conta? Esta ação não pode ser desfeita.');">Excluir Conta</a>
+    <a href='{{ url_for("feed") }}'>Feed</a>
+    <a href='{{ url_for("perfil", user_id=current_user.id) }}'>Perfil</a>
+    
+</nav>

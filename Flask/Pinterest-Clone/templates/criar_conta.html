@@ -1,40 +1,46 @@
-<html>
+<!DOCTYPE html>
+<html lang="pt">
     <head>
+        <meta charset="UTF-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        <link href="{{ url_for('static', filename='style/style.css') }}" rel="stylesheet" />
         <title>Criar Conta</title>
     </head>
-    <body>
-        <h1>Criar Conta</h1>
-        <form method="POST">
+    <body class="pagina-form">
+        <div class="form-card">
+            <h1>Criar Conta</h1>
+            <form method="POST">
             {{ form.csrf_token() }}
-            <p>
+            <p class="div-input">
                 {{ form.username.label }}<br>
-                {{ form.username() }}
+                {{ form.username(class="input") }}
                 {% for error in form.username.errors %}
                     <span style="color: red;">[{{ error }}]</span>
                 {% endfor %}
             </p>
-            <p>
+            <p class="div-input">
                 {{ form.email.label }}<br>
-                {{ form.email() }}
+                {{ form.email(class="input") }}
                 {% for error in form.email.errors %}
                     <span style="color: red;">[{{ error }}]</span>
                 {% endfor %}
             </p>
-            <p>
+            <p class="div-input">
                 {{ form.password.label }}<br>
-                {{ form.password() }}
+                {{ form.password(class="input") }}
                 {% for error in form.password.errors %}
                     <span style="color: red;">[{{ error }}]</span>
                 {% endfor %}
             </p>
-            <p>
+            <p class="div-input">
                 {{ form.confirm_password.label }}<br>
-                {{ form.confirm_password() }}
+                {{ form.confirm_password(class="input") }}
                 {% for error in form.confirm_password.errors %}
                     <span style="color: red;">[{{ error }}]</span>
                 {% endfor %}
             </p>
-            <p>{{ form.submit_button() }}</p>
-        </form>
+            <p>{{ form.submit_button(class="botao-login") }}</p>
+            </form>
+        </div>
     </body>
 </html>
