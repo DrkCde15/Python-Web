@@ -1,0 +1,778 @@
+<!DOCTYPE html>
+<html lang="pt-BR" data-bs-theme="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Bot WhatsApp — Dashboard</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" rel="stylesheet">
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: 'Segoe UI', system-ui, -apple-system, sans-serif; overflow-x: hidden; }
+    .sidebar {
+      position: fixed; top: 0; left: 0; bottom: 0; width: 240px;
+      background: #1a1d23; border-right: 1px solid #2a2d35;
+      padding: 0; z-index: 100; transition: transform .3s;
+    }
+    .sidebar .brand {
+      padding: 20px 20px 16px; font-size: 18px; font-weight: 700;
+      border-bottom: 1px solid #2a2d35; color: #e0e0e0;
+    }
+    .sidebar .brand i { color: #25d366; margin-right: 10px; }
+    .sidebar .nav-item {
+      display: flex; align-items: center; gap: 12px; padding: 12px 20px;
+      color: #9a9ea8; cursor: pointer; transition: all .15s;
+      border-left: 3px solid transparent; text-decoration: none;
+    }
+    .sidebar .nav-item:hover { background: #22252d; color: #e0e0e0; }
+    .sidebar .nav-item.active {
+      background: #22252d; color: #25d366; border-left-color: #25d366;
+    }
+    .sidebar .nav-item i { width: 20px; text-align: center; font-size: 16px; }
+    .main { margin-left: 240px; min-height: 100vh; background: #121418; }
+    .topbar {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 16px 24px; background: #1a1d23; border-bottom: 1px solid #2a2d35;
+    }
+    .topbar h5 { margin: 0; color: #e0e0e0; font-weight: 600; }
+    .topbar .badge-connected { background: #25d366; color: #000; font-weight: 600; }
+    .content { padding: 24px; }
+    .stat-card {
+      background: #1a1d23; border: 1px solid #2a2d35; border-radius: 12px;
+      padding: 20px; transition: border-color .2s;
+    }
+    .stat-card:hover { border-color: #25d366; }
+    .stat-card .icon {
+      width: 48px; height: 48px; border-radius: 12px;
+      display: flex; align-items: center; justify-content: center; font-size: 20px;
+    }
+    .stat-card .value { font-size: 28px; font-weight: 700; color: #e0e0e0; margin-top: 12px; }
+    .stat-card .label { font-size: 13px; color: #9a9ea8; margin-top: 2px; }
+    .table-custom { font-size: 14px; }
+    .table-custom th { border-bottom-color: #2a2d35; color: #9a9ea8; font-weight: 600; }
+    .table-custom td { border-bottom-color: #1e2128; vertical-align: middle; }
+    .table-custom tr:hover td { background: rgba(37, 211, 102, 0.04); }
+    .btn-outline-success { border-color: #25d366; color: #25d366; }
+    .btn-outline-success:hover { background: #25d366; color: #000; }
+    .badge-estado { font-size: 12px; padding: 4px 10px; border-radius: 20px; font-weight: 500; }
+    .login-screen {
+      display: flex; align-items: center; justify-content: center;
+      min-height: 100vh; background: #121418;
+    }
+    .login-box {
+      background: #1a1d23; border: 1px solid #2a2d35; border-radius: 16px;
+      padding: 40px; width: 100%; max-width: 400px;
+    }
+    .login-box .brand { text-align: center; margin-bottom: 32px; }
+    .login-box .brand i { font-size: 48px; color: #25d366; }
+    .login-box .brand h4 { color: #e0e0e0; margin-top: 12px; font-weight: 700; }
+    .form-control, .form-select {
+      background: #1e2128; border: 1px solid #2a2d35; color: #e0e0e0;
+    }
+    .form-control:focus, .form-select:focus {
+      border-color: #25d366; box-shadow: 0 0 0 2px rgba(37, 211, 102, 0.15);
+      background: #1e2128; color: #e0e0e0;
+    }
+    .form-control::placeholder { color: #6b6f7a; }
+    .conversa-msg {
+      background: #1e2128; border-radius: 12px; padding: 12px 16px;
+      margin-bottom: 8px; border-left: 3px solid #25d366;
+    }
+    .conversa-msg .meta { font-size: 12px; color: #6b6f7a; margin-bottom: 4px; }
+    .conversa-msg .msg-text { color: #e0e0e0; white-space: pre-wrap; }
+    .conversa-resp {
+      background: #22252d; border-radius: 12px; padding: 12px 16px;
+      margin-bottom: 12px; margin-left: 24px; border-left: 3px solid #6b6f7a;
+    }
+    .conversa-resp .meta { font-size: 12px; color: #6b6f7a; margin-bottom: 4px; }
+    .conversa-resp .msg-text { color: #c0c4cc; white-space: pre-wrap; }
+    .input-group-custom .btn { border-color: #2a2d35; }
+    ::-webkit-scrollbar { width: 6px; }
+    ::-webkit-scrollbar-track { background: #121418; }
+    ::-webkit-scrollbar-thumb { background: #2a2d35; border-radius: 3px; }
+    ::-webkit-scrollbar-thumb:hover { background: #3a3d45; }
+    @media (max-width: 768px) {
+      .sidebar { transform: translateX(-100%); }
+      .sidebar.show { transform: translateX(0); }
+      .main { margin-left: 0; }
+    }
+    .whatsapp-btn {
+      background: #25d366; color: #000; font-weight: 600;
+      border: none; transition: all .15s;
+    }
+    .whatsapp-btn:hover { background: #20bd5a; color: #000; }
+    .section-title { font-size: 16px; font-weight: 600; color: #e0e0e0; margin-bottom: 16px; }
+    .page { display: none; }
+    .page.active { display: block; }
+  </style>
+</head>
+<body>
+
+<div class="sidebar" id="sidebar">
+  <div class="brand">
+    <i class="fab fa-whatsapp"></i> Bot Dashboard
+  </div>
+  <div style="padding: 12px 0;">
+    <a class="nav-item active" data-page="overview" onclick="navigate('overview')">
+      <i class="fas fa-chart-simple"></i> Visão Geral
+    </a>
+    <a class="nav-item" data-page="clientes" onclick="navigate('clientes')">
+      <i class="fas fa-users"></i> Clientes
+    </a>
+    <a class="nav-item" data-page="conversas" onclick="navigate('conversas')">
+      <i class="fas fa-comments"></i> Conversas
+    </a>
+    <a class="nav-item" data-page="agendamentos" onclick="navigate('agendamentos')">
+      <i class="fas fa-calendar-check"></i> Agendamentos
+    </a>
+    <a class="nav-item" data-page="config" onclick="navigate('config')">
+      <i class="fas fa-gear"></i> Configurações
+    </a>
+  </div>
+  <div style="position: absolute; bottom: 16px; left: 0; right: 0; padding: 0 20px;">
+    <button class="btn btn-outline-danger btn-sm w-100" onclick="logout()">
+      <i class="fas fa-sign-out-alt"></i> Sair
+    </button>
+  </div>
+</div>
+
+<div class="main" id="mainContent">
+  <div class="topbar">
+    <div>
+      <button class="btn btn-sm btn-outline-secondary d-md-none me-2" onclick="toggleSidebar()">
+        <i class="fas fa-bars"></i>
+      </button>
+      <h5 id="pageTitle">Visão Geral</h5>
+    </div>
+    <div>
+      <span class="badge badge-connected me-2" id="statusBadge">
+        <i class="fas fa-circle" style="font-size: 8px; margin-right: 4px;"></i> Conectado
+      </span>
+    </div>
+  </div>
+
+  <div class="content">
+
+    <!-- Overview -->
+    <div class="page active" id="page-overview">
+      <div class="row g-3" id="statsCards"></div>
+      <div class="row mt-4">
+        <div class="col-md-6">
+          <div class="stat-card">
+            <div class="section-title"><i class="fas fa-clock"></i> Últimas Conversas</div>
+            <div id="latestConversations" style="max-height: 300px; overflow-y: auto;"></div>
+          </div>
+        </div>
+        <div class="col-md-6">
+          <div class="stat-card">
+            <div class="section-title"><i class="fas fa-calendar"></i> Próximos Agendamentos</div>
+            <div id="upcomingAppointments" style="max-height: 300px; overflow-y: auto;"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Clientes -->
+    <div class="page" id="page-clientes">
+      <div class="stat-card">
+        <div class="d-flex justify-content-between align-items-center mb-3">
+          <div class="section-title" style="margin-bottom: 0;"><i class="fas fa-users"></i> Clientes</div>
+          <div style="width: 260px;">
+            <input class="form-control form-control-sm" placeholder="Buscar por telefone ou nome..." id="clienteSearch" oninput="renderClientes()">
+          </div>
+        </div>
+        <div class="table-responsive">
+          <table class="table table-custom table-hover mb-0">
+            <thead>
+              <tr>
+                <th>Telefone</th>
+                <th>Nome</th>
+                <th>Estado</th>
+                <th>Cadastro</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody id="clientesTableBody"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- Conversas -->
+    <div class="page" id="page-conversas">
+      <div class="stat-card">
+        <div class="mb-3">
+          <div class="section-title" style="margin-bottom: 8px;"><i class="fas fa-comments"></i> Conversa com Cliente</div>
+          <select class="form-select form-select-sm" style="max-width: 400px;" id="conversaSelect" onchange="carregarConversa()">
+            <option value="">— Selecione um cliente —</option>
+          </select>
+        </div>
+        <div id="conversaContainer" style="max-height: 400px; overflow-y: auto; margin-bottom: 16px;"></div>
+        <div id="conversaEmpty" class="text-center text-secondary py-4">Selecione um cliente para ver as conversas</div>
+        <div class="input-group input-group-custom" id="sendMessageGroup" style="display: none;">
+          <input class="form-control" placeholder="Digite uma mensagem..." id="sendMessageInput"
+            onkeydown="if(event.key==='Enter') sendMessage()">
+          <button class="btn whatsapp-btn" onclick="sendMessage()">
+            <i class="fab fa-whatsapp"></i> Enviar
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Agendamentos -->
+    <div class="page" id="page-agendamentos">
+      <div class="stat-card">
+        <div class="d-flex justify-content-between align-items-center mb-3">
+          <div class="section-title" style="margin-bottom: 0;"><i class="fas fa-calendar-check"></i> Agendamentos</div>
+          <select class="form-select form-select-sm" style="width: 160px;" id="agendamentoFilter" onchange="renderAgendamentos()">
+            <option value="">Todos</option>
+            <option value="pendente">Pendentes</option>
+            <option value="confirmado">Confirmados</option>
+            <option value="cancelado">Cancelados</option>
+            <option value="concluido">Concluídos</option>
+          </select>
+        </div>
+        <div class="table-responsive">
+          <table class="table table-custom table-hover mb-0">
+            <thead>
+              <tr>
+                <th>Cliente</th>
+                <th>Serviço</th>
+                <th>Data/Hora</th>
+                <th>Status</th>
+                <th>Ações</th>
+              </tr>
+            </thead>
+            <tbody id="agendamentosTableBody"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- Config -->
+    <div class="page" id="page-config">
+      <div class="stat-card mb-3">
+        <div class="section-title"><i class="fas fa-microchip"></i> IA — Provedor</div>
+        <p class="text-secondary small mb-2">Configure a API de IA para respostas automáticas.</p>
+        <div class="row g-2 mb-2">
+          <div class="col-md-6">
+            <label class="form-label small text-secondary">API Key</label>
+            <input class="form-control" id="cfgGroqKey" type="password" placeholder="gsk_...">
+          </div>
+          <div class="col-md-3">
+            <label class="form-label small text-secondary">Modelo</label>
+            <input class="form-control" id="cfgGroqModel" placeholder="ex: openai/gpt-oss-120b">
+          </div>
+          <div class="col-md-3">
+            <label class="form-label small text-secondary">Base URL</label>
+            <input class="form-control" id="cfgGroqBase" placeholder="https://api.groq.com/openai/v1">
+          </div>
+        </div>
+        <button class="btn whatsapp-btn btn-sm" onclick="salvarSettings()">
+          <i class="fas fa-save"></i> Salvar IA
+        </button>
+        <span id="settingsStatus" class="ms-2 small"></span>
+      </div>
+      <div class="stat-card mb-3">
+        <div class="section-title"><i class="fas fa-shield"></i> Whitelist (números autorizados)</div>
+        <p class="text-secondary small mb-2">Apenas números na lista podem falar com o bot.</p>
+        <div class="d-flex align-items-center gap-3 mb-3">
+          <div class="form-check form-switch mb-0">
+            <input class="form-check-input" type="checkbox" id="whitelistToggle" style="width:44px;height:22px;cursor:pointer;">
+            <label class="form-check-label small text-secondary ms-1" for="whitelistToggle" id="whitelistToggleLabel">Ativado</label>
+          </div>
+        </div>
+        <div class="mb-2">
+          <textarea class="form-control" id="whitelistInput" rows="4"
+            placeholder="5511999998888&#10;5511888887777"></textarea>
+        </div>
+        <button class="btn whatsapp-btn btn-sm" onclick="salvarWhitelist()">
+          <i class="fas fa-save"></i> Salvar Whitelist
+        </button>
+        <span id="whitelistStatus" class="ms-2 small"></span>
+      </div>
+      <div class="stat-card">
+        <div class="section-title"><i class="fas fa-info-circle"></i> Informações do Sistema</div>
+        <table class="table table-custom mb-0" style="max-width: 500px;">
+          <tr><td>Status Gateway</td><td id="sysGatewayStatus">—</td></tr>
+          <tr><td>Total de clientes</td><td id="sysTotalClientes">—</td></tr>
+          <tr><td>Total de conversas</td><td id="sysTotalConversas">—</td></tr>
+          <tr><td>Whitelist ativa</td><td id="sysWhitelistAtiva">—</td></tr>
+          <tr><td>IA configurada</td><td id="sysGroqStatus">—</td></tr>
+        </table>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<!-- Login Screen -->
+<div class="login-screen" id="loginScreen">
+  <div class="login-box">
+    <div class="brand">
+      <i class="fab fa-whatsapp"></i>
+      <h4>Bot WhatsApp</h4>
+      <p class="text-secondary small">Faça login para acessar o painel</p>
+    </div>
+    <div class="mb-3">
+      <input class="form-control" type="password" id="loginPass" placeholder="Senha"
+        onkeydown="if(event.key==='Enter') login()">
+    </div>
+    <button class="btn whatsapp-btn w-100" onclick="login()">
+      <i class="fas fa-right-to-bracket"></i> Entrar
+    </button>
+    <div id="loginError" class="text-danger small mt-2 text-center"></div>
+  </div>
+</div>
+
+<!-- Setup Screen -->
+<div class="login-screen" id="setupScreen" style="display:none;">
+  <div class="login-box" style="max-width:460px;">
+    <div class="brand">
+      <i class="fas fa-key"></i>
+      <h4>Configurar Painel</h4>
+      <p class="text-secondary small">Primeiro acesso — defina a senha e configure a IA</p>
+    </div>
+    <div class="mb-3">
+      <input class="form-control" type="password" id="setupPass" placeholder="Senha do painel (mín. 4 caracteres)"
+        onkeydown="if(event.key==='Enter') setup()">
+    </div>
+    <div class="mb-3">
+      <input class="form-control" type="password" id="setupPassConfirm" placeholder="Repetir senha"
+        onkeydown="if(event.key==='Enter') setup()">
+    </div>
+    <hr style="border-color:#2a2d35;">
+    <p class="small text-secondary mb-2">Configure a IA para respostas automáticas:</p>
+    <div class="mb-2">
+      <input class="form-control" id="setupGroqKey" placeholder="Chave da API Groq (gsk_...)"
+        onkeydown="if(event.key==='Enter') setup()">
+    </div>
+    <div class="row g-2 mb-3">
+      <div class="col-7">
+        <input class="form-control" id="setupGroqModel" placeholder="Modelo (ex: grok-2-1212)"
+          value="openai/gpt-oss-120b">
+      </div>
+      <div class="col-5">
+        <select class="form-select" id="setupGroqBase">
+          <option value="https://api.groq.com/openai/v1">Groq</option>
+          <option value="https://api.x.ai/v1">xAI (Grok)</option>
+          <option value="https://api.openai.com/v1">OpenAI</option>
+        </select>
+      </div>
+    </div>
+    <button class="btn whatsapp-btn w-100" onclick="setup()">
+      <i class="fas fa-save"></i> Salvar e continuar
+    </button>
+    <div id="setupError" class="text-danger small mt-2 text-center"></div>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+<script>
+  const API = '';
+  let token = localStorage.getItem('dashboard_token') || '';
+  let clientesCache = [];
+  let agendamentosCache = [];
+
+  async function api(method, path, body = null) {
+    const opts = {
+      method,
+      headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
+    };
+    if (body) opts.body = JSON.stringify(body);
+    const r = await fetch(API + path, opts);
+    if (r.status === 401) { logout(); throw new Error('Unauthorized'); }
+    if (!r.ok) { const e = await r.json().catch(() => ({})); throw new Error(e.detail || 'Erro'); }
+    return r.json();
+  }
+
+  async function login() {
+    const pass = document.getElementById('loginPass').value;
+    try {
+      const r = await fetch('/admin/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ password: pass }),
+      });
+      if (!r.ok) throw new Error('Senha inválida');
+      const d = await r.json();
+      token = d.token;
+      localStorage.setItem('dashboard_token', token);
+      document.getElementById('loginScreen').style.display = 'none';
+      document.getElementById('sidebar').style.display = '';
+      document.getElementById('mainContent').style.display = '';
+      init();
+    } catch (e) {
+      document.getElementById('loginError').textContent = e.message;
+    }
+  }
+
+  async function setup() {
+    const pass = document.getElementById('setupPass').value;
+    const confirm = document.getElementById('setupPassConfirm').value;
+    const groqKey = document.getElementById('setupGroqKey').value.trim();
+    const groqModel = document.getElementById('setupGroqModel').value.trim();
+    const groqBase = document.getElementById('setupGroqBase').value;
+    if (pass.length < 4) { document.getElementById('setupError').textContent = 'Mínimo 4 caracteres'; return; }
+    if (pass !== confirm) { document.getElementById('setupError').textContent = 'Senhas não conferem'; return; }
+    try {
+      const r = await fetch('/api/setup', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ password: pass, groq_api_key: groqKey, groq_model: groqModel, groq_base_url: groqBase }),
+      });
+      if (!r.ok) { const e = await r.json(); throw new Error(e.detail || 'Erro'); }
+      document.getElementById('setupScreen').style.display = 'none';
+      document.getElementById('loginScreen').style.display = 'flex';
+      document.getElementById('setupError').textContent = '';
+    } catch (e) {
+      document.getElementById('setupError').textContent = e.message;
+    }
+  }
+
+  function logout() {
+    token = '';
+    localStorage.removeItem('dashboard_token');
+    document.getElementById('loginScreen').style.display = 'flex';
+    document.getElementById('sidebar').style.display = 'none';
+    document.getElementById('mainContent').style.display = 'none';
+  }
+
+  function toggleSidebar() {
+    document.getElementById('sidebar').classList.toggle('show');
+  }
+
+  function navigate(page) {
+    document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+    document.getElementById(`page-${page}`).classList.add('active');
+    document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+    document.querySelector(`.nav-item[data-page="${page}"]`).classList.add('active');
+    document.getElementById('pageTitle').textContent =
+      document.querySelector(`.nav-item[data-page="${page}"]`).textContent.trim();
+    if (page === 'overview') loadOverview();
+    if (page === 'clientes') renderClientes();
+    if (page === 'conversas') { carregarConversaSelect(); }
+    if (page === 'agendamentos') renderAgendamentos();
+    if (page === 'config') loadConfig();
+    if (window.innerWidth < 768) document.getElementById('sidebar').classList.remove('show');
+  }
+
+  async function init() {
+    if (!token) return;
+    try {
+      await api('GET', '/api/stats');
+      loadOverview();
+      renderClientes();
+      renderAgendamentos();
+      carregarConversaSelect();
+      loadConfig();
+      checkGatewayStatus();
+      setInterval(loadOverview, 10000);
+      setInterval(checkGatewayStatus, 15000);
+    } catch (e) { /* ignore */ }
+  }
+
+  async function checkSetup() {
+    try {
+      const r = await fetch('/api/setup-status');
+      const d = await r.json();
+      if (!d.configured) {
+        document.getElementById('setupScreen').style.display = 'flex';
+        document.getElementById('loginScreen').style.display = 'none';
+      } else if (token) {
+        try {
+          await api('GET', '/api/stats');
+          document.getElementById('loginScreen').style.display = 'none';
+          document.getElementById('sidebar').style.display = '';
+          document.getElementById('mainContent').style.display = '';
+          init();
+        } catch (e) {
+          document.getElementById('loginScreen').style.display = 'flex';
+        }
+      } else {
+        document.getElementById('loginScreen').style.display = 'flex';
+      }
+    } catch (e) {
+      document.getElementById('loginScreen').style.display = 'flex';
+    }
+  }
+
+  function checkGatewayStatus() {
+    fetch('http://localhost:3001/health', { timeout: 3000 })
+      .then(r => r.json())
+      .then(d => {
+        const badge = document.getElementById('statusBadge');
+        if (d.connected) {
+          badge.className = 'badge badge-connected';
+          badge.innerHTML = '<i class="fas fa-circle" style="font-size:8px;margin-right:4px;color:#fff;"></i> WhatsApp Conectado';
+        } else {
+          badge.className = 'badge bg-warning text-dark';
+          badge.innerHTML = '<i class="fas fa-circle" style="font-size:8px;margin-right:4px;"></i> Desconectado';
+        }
+        document.getElementById('sysGatewayStatus').textContent = d.connected ? 'Conectado' : 'Desconectado';
+      })
+      .catch(() => {
+        document.getElementById('statusBadge').className = 'badge bg-danger';
+        document.getElementById('statusBadge').innerHTML = '<i class="fas fa-circle" style="font-size:8px;margin-right:4px;"></i> Gateway Offline';
+        document.getElementById('sysGatewayStatus').textContent = 'Offline';
+      });
+  }
+
+  async function loadOverview() {
+    try {
+      const s = await api('GET', '/api/stats');
+      document.getElementById('statsCards').innerHTML = `
+        <div class="col-md-3 col-6"><div class="stat-card">
+          <div class="icon" style="background:rgba(37,211,102,.12);color:#25d366;"><i class="fas fa-users"></i></div>
+          <div class="value">${s.total_clientes}</div><div class="label">Clientes</div>
+        </div></div>
+        <div class="col-md-3 col-6"><div class="stat-card">
+          <div class="icon" style="background:rgba(13,110,253,.12);color:#0d6efd;"><i class="fas fa-comments"></i></div>
+          <div class="value">${s.total_conversas}</div><div class="label">Conversas</div>
+        </div></div>
+        <div class="col-md-3 col-6"><div class="stat-card">
+          <div class="icon" style="background:rgba(255,193,7,.12);color:#ffc107;"><i class="fas fa-calendar-check"></i></div>
+          <div class="value">${s.total_agendamentos}</div><div class="label">Agendamentos</div>
+        </div></div>
+        <div class="col-md-3 col-6"><div class="stat-card">
+          <div class="icon" style="background:rgba(111,66,193,.12);color:#6f42c1;"><i class="fas fa-ban"></i></div>
+          <div class="value">${s.whitelist_active ? s.whitelist_count : '—'}</div><div class="label">Whitelist ${s.whitelist_active ? '' : '(off)'}</div>
+        </div></div>
+      `;
+      document.getElementById('sysTotalClientes').textContent = s.total_clientes;
+      document.getElementById('sysTotalConversas').textContent = s.total_conversas;
+      document.getElementById('sysWhitelistAtiva').textContent = s.whitelist_active ? 'Sim (' + s.whitelist_count + ' números)' : 'Desativada';
+      document.getElementById('sysGroqStatus').textContent = s.groq_configured ? '✅ Configurada' : '❌ Não configurada';
+
+      // Latest conversations
+      const cl = await api('GET', '/clientes');
+      const recentClients = cl.slice(-5).reverse();
+      document.getElementById('latestConversations').innerHTML = recentClients.length
+        ? recentClients.map(c => `<div class="d-flex justify-content-between align-items-center py-2 border-bottom border-secondary" style="border-color:#2a2d35!important;">
+            <span>${c.nome || '—'} <small class="text-secondary">${c.telefone.split('@')[0]}</small></span>
+            <span class="badge-estado" style="background:rgba(37,211,102,.1);color:#25d366;">${c.estado}</span>
+          </div>`).join('')
+        : '<div class="text-secondary py-3 text-center">Nenhum cliente ainda</div>';
+
+      // Upcoming appointments
+      const ag = await api('GET', '/agendamentos');
+      const upcoming = ag.filter(a => a.status === 'pendente' || a.status === 'confirmado').slice(0, 5);
+      document.getElementById('upcomingAppointments').innerHTML = upcoming.length
+        ? upcoming.map(a => `<div class="d-flex justify-content-between align-items-center py-2 border-bottom border-secondary" style="border-color:#2a2d35!important;">
+            <span><strong>${a.nome || '—'}</strong><br><small class="text-secondary">${a.servico || ''}</small></span>
+            <span class="text-end"><small>${formatDate(a.data_hora)}</small><br>
+              <span class="badge-estado" style="background:rgba(255,193,7,.12);color:#ffc107;">${a.status}</span></span>
+          </div>`).join('')
+        : '<div class="text-secondary py-3 text-center">Nenhum agendamento pendente</div>';
+
+    } catch (e) { console.error(e); }
+  }
+
+  async function renderClientes() {
+    try {
+      clientesCache = await api('GET', '/clientes');
+      const q = (document.getElementById('clienteSearch').value || '').toLowerCase();
+      const filtrados = clientesCache.filter(c =>
+        c.telefone.includes(q) || c.nome.toLowerCase().includes(q)
+      );
+      document.getElementById('clientesTableBody').innerHTML = filtrados.length
+        ? filtrados.map(c => `<tr>
+            <td><code>${c.telefone.split('@')[0]}</code></td>
+            <td><span class="editable-name" onclick="editarNome('${c.telefone}', this)">${c.nome || '<span class="text-secondary">—</span>'}</span></td>
+            <td><span class="badge-estado" style="background:rgba(37,211,102,.1);color:#25d366;">${c.estado}</span></td>
+            <td><small class="text-secondary">${c.created_at ? formatDate(c.created_at) : '—'}</small></td>
+            <td><button class="btn btn-sm btn-outline-success" onclick="abrirConversa('${c.telefone}')"><i class="fas fa-comment"></i></button></td>
+          </tr>`).join('')
+        : '<tr><td colspan="5" class="text-center text-secondary py-3">Nenhum cliente encontrado</td></tr>';
+    } catch (e) { console.error(e); }
+  }
+
+  function editarNome(telefone, el) {
+    const atual = el.textContent.trim() === '—' ? '' : el.textContent.trim();
+    const input = document.createElement('input');
+    input.className = 'form-control form-control-sm d-inline-block';
+    input.style.width = '200px';
+    input.value = atual;
+    el.innerHTML = '';
+    el.appendChild(input);
+    input.focus();
+    input.onblur = async () => {
+      const novo = input.value.trim();
+      try {
+        await api('PUT', `/api/clientes/${encodeURIComponent(telefone)}/nome`, { nome: novo });
+        el.textContent = novo || '—';
+      } catch (e) { el.textContent = atual || '—'; }
+    };
+    input.onkeydown = (e) => { if (e.key === 'Enter') input.blur(); };
+  }
+
+  async function carregarConversaSelect() {
+    try {
+      const cl = await api('GET', '/clientes');
+      const sel = document.getElementById('conversaSelect');
+      const currentVal = sel.value;
+      sel.innerHTML = '<option value="">— Selecione um cliente —</option>' +
+        cl.map(c => `<option value="${c.telefone}">${c.nome || 'Sem nome'} — ${c.telefone.split('@')[0]}</option>`).join('');
+      if (currentVal) sel.value = currentVal;
+    } catch (e) { console.error(e); }
+  }
+
+  function abrirConversa(telefone) {
+    navigate('conversas');
+    document.getElementById('conversaSelect').value = telefone;
+    carregarConversa();
+  }
+
+  async function carregarConversa() {
+    const telefone = document.getElementById('conversaSelect').value;
+    const container = document.getElementById('conversaContainer');
+    const empty = document.getElementById('conversaEmpty');
+    const sendGroup = document.getElementById('sendMessageGroup');
+
+    if (!telefone) {
+      container.innerHTML = ''; empty.style.display = 'block'; sendGroup.style.display = 'none';
+      return;
+    }
+
+    try {
+      const conversas = await api('GET', `/api/conversas/${encodeURIComponent(telefone)}`);
+      empty.style.display = 'none';
+      sendGroup.style.display = 'flex';
+      document.getElementById('sendMessageInput').dataset.telefone = telefone;
+
+      if (!conversas.length) {
+        container.innerHTML = '<div class="text-secondary text-center py-4">Nenhuma conversa encontrada</div>';
+        return;
+      }
+
+      container.innerHTML = conversas.map(c => `
+        <div class="conversa-msg">
+          <div class="meta"><i class="fas fa-user"></i> Cliente • ${formatDateTime(c.created_at)}</div>
+          <div class="msg-text">${escapeHtml(c.mensagem)}</div>
+        </div>
+        ${c.resposta ? `<div class="conversa-resp">
+          <div class="meta"><i class="fas fa-robot"></i> Bot ${c.tipo === 'admin' ? '(Admin)' : ''} • ${formatDateTime(c.created_at)}</div>
+          <div class="msg-text">${escapeHtml(c.resposta)}</div>
+        </div>` : ''}
+      `).join('');
+      container.scrollTop = container.scrollHeight;
+    } catch (e) { console.error(e); }
+  }
+
+  async function sendMessage() {
+    const input = document.getElementById('sendMessageInput');
+    const telefone = input.dataset.telefone;
+    const text = input.value.trim();
+    if (!text || !telefone) return;
+    input.value = '';
+    try {
+      await api('POST', '/api/send', { to: telefone, text });
+      carregarConversa();
+    } catch (e) { alert('Erro ao enviar: ' + e.message); }
+  }
+
+  async function renderAgendamentos() {
+    try {
+      agendamentosCache = await api('GET', '/agendamentos');
+      const filtro = document.getElementById('agendamentoFilter').value;
+      const filtrados = filtro ? agendamentosCache.filter(a => a.status === filtro) : agendamentosCache;
+      document.getElementById('agendamentosTableBody').innerHTML = filtrados.length
+        ? filtrados.map(a => `<tr>
+            <td><strong>${a.nome || '—'}</strong><br><small class="text-secondary">${a.telefone.split('@')[0]}</small></td>
+            <td>${a.servico || '—'}</td>
+            <td>${formatDate(a.data_hora)}</td>
+            <td>${statusBadge(a.status)}</td>
+            <td>
+              ${a.status === 'pendente' ? `
+                <button class="btn btn-sm btn-outline-success" onclick="updateAgendamento(${a.id},'confirmado')" title="Confirmar"><i class="fas fa-check"></i></button>
+                <button class="btn btn-sm btn-outline-danger" onclick="updateAgendamento(${a.id},'cancelado')" title="Cancelar"><i class="fas fa-times"></i></button>
+              ` : ''}
+              ${a.status === 'confirmado' ? `
+                <button class="btn btn-sm btn-outline-primary" onclick="updateAgendamento(${a.id},'concluido')" title="Concluir"><i class="fas fa-check-double"></i></button>
+                <button class="btn btn-sm btn-outline-danger" onclick="updateAgendamento(${a.id},'cancelado')" title="Cancelar"><i class="fas fa-times"></i></button>
+              ` : ''}
+            </td>
+          </tr>`).join('')
+        : '<tr><td colspan="5" class="text-center text-secondary py-3">Nenhum agendamento encontrado</td></tr>';
+    } catch (e) { console.error(e); }
+  }
+
+  async function updateAgendamento(id, status) {
+    try {
+      await api('PUT', `/api/agendamentos/${id}`, { status });
+      renderAgendamentos();
+    } catch (e) { alert('Erro: ' + e.message); }
+  }
+
+  function statusBadge(status) {
+    const colors = { pendente: '#ffc107', confirmado: '#25d366', cancelado: '#dc3545', concluido: '#0d6efd' };
+    return `<span class="badge-estado" style="background:${colors[status] || '#6b6f7a'}20;color:${colors[status] || '#6b6f7a'};">${status}</span>`;
+  }
+
+  async function loadConfig() {
+    try {
+      const w = await api('GET', '/api/whitelist');
+      document.getElementById('whitelistInput').value = w.numbers.join('\n');
+      document.getElementById('whitelistToggle').checked = w.enabled;
+      document.getElementById('whitelistToggleLabel').textContent = w.enabled ? 'Ativado' : 'Desativado';
+      const s = await api('GET', '/api/settings');
+      document.getElementById('cfgGroqKey').value = s.groq_api_key || '';
+      document.getElementById('cfgGroqModel').value = s.groq_model || '';
+      document.getElementById('cfgGroqBase').value = s.groq_base_url || '';
+    } catch (e) { console.error(e); }
+  }
+
+  async function salvarSettings() {
+    const body = {
+      groq_api_key: document.getElementById('cfgGroqKey').value.trim(),
+      groq_model: document.getElementById('cfgGroqModel').value.trim(),
+      groq_base_url: document.getElementById('cfgGroqBase').value.trim(),
+    };
+    try {
+      await api('PUT', '/api/settings', body);
+      document.getElementById('settingsStatus').textContent = '✅ Salvo!';
+      document.getElementById('settingsStatus').style.color = '#25d366';
+    } catch (e) {
+      document.getElementById('settingsStatus').textContent = '❌ ' + e.message;
+      document.getElementById('settingsStatus').style.color = '#dc3545';
+    }
+  }
+
+  async function salvarWhitelist() {
+    const val = document.getElementById('whitelistInput').value.trim();
+    const enabled = document.getElementById('whitelistToggle').checked;
+    const numbers = val ? val.split('\n').map(s => s.trim()).filter(Boolean) : [];
+    try {
+      await api('PUT', '/api/whitelist', { numbers, enabled });
+      document.getElementById('whitelistToggleLabel').textContent = enabled ? 'Ativado' : 'Desativado';
+      document.getElementById('whitelistStatus').textContent = '✅ Salvo!';
+      document.getElementById('whitelistStatus').style.color = '#25d366';
+    } catch (e) {
+      document.getElementById('whitelistStatus').textContent = '❌ ' + e.message;
+      document.getElementById('whitelistStatus').style.color = '#dc3545';
+    }
+  }
+
+  function formatDate(d) {
+    if (!d) return '—';
+    const dt = new Date(d);
+    return dt.toLocaleDateString('pt-BR') + ' ' + dt.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+  }
+
+  function formatDateTime(d) {
+    if (!d) return '—';
+    const dt = new Date(d);
+    return dt.toLocaleDateString('pt-BR') + ' ' + dt.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+  }
+
+  function escapeHtml(t) {
+    const d = document.createElement('div');
+    d.textContent = t;
+    return d.innerHTML;
+  }
+
+  // Init
+  checkSetup();
+</script>
+</body>
+</html>
