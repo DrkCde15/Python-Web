@@ -1,3 +1,4 @@
+# Integração com a API Groq (compatível com OpenAI) para respostas inteligentes
 from openai import AsyncOpenAI
 from database import get_config
 
@@ -7,6 +8,7 @@ _cached_url = ''
 
 
 async def _get_client():
+    # Singleton: recria o client apenas se a chave ou URL mudarem
     global _client, _cached_key, _cached_url
     key = get_config('groq_api_key', '')
     url = get_config('groq_base_url', 'https://api.groq.com/openai/v1')
@@ -36,12 +38,14 @@ Regras:
 
 
 async def ask_ai(message: str, history: list = None) -> str:
+    # Envia prompt para a API Groq e retorna a resposta
     client = await _get_client()
     model = await get_model()
 
     if not client:
         return "Desculpe, o atendimento por IA está temporariamente indisponível. Digite *0* para falar com um atendente."
 
+    # Constrói o array de mensagens com system prompt + histórico (últimas 10) + mensagem atual
     messages = [{"role": "system", "content": SYSTEM_PROMPT}]
 
     if history:

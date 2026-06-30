@@ -1,3 +1,4 @@
+# Textos do menu interativo — cada constante representa uma tela do fluxo do bot
 MENU_PRINCIPAL = """╔══════════════════════╗
 ║       *ATENDIMENTO*     ║
 ╚══════════════════════╝
@@ -36,6 +37,7 @@ FALAR_ATENDENTE = "🔁 Transferindo para um atendente...\n\nEm breve alguém da
 
 
 def get_menu_text(estado, dados=None):
+    # Retorna o texto da tela correspondente ao estado atual do cliente
     if estado == 'inicio':
         return MENU_PRINCIPAL
     if estado == 'informacoes':

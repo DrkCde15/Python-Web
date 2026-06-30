@@ -1,21 +1,27 @@
+# Modelos SQLAlchemy + funções de acesso ao banco com suporte a DI (get_db)
+# Valores sensíveis (admin_password, groq_api_key) são criptografados automaticamente.
 from datetime import datetime
 from sqlalchemy import create_engine, Column, Integer, String, Text, DateTime, Boolean, JSON
-from sqlalchemy.orm import declarative_base, sessionmaker
+from sqlalchemy.orm import declarative_base, sessionmaker, Session
 from config import DATABASE_URL
+from security import encrypt_value, decrypt_value
 
 engine = create_engine(DATABASE_URL, connect_args={'check_same_thread': False})
 SessionLocal = sessionmaker(bind=engine)
 Base = declarative_base()
+
+# Chaves que serão criptografadas ao salvar e descriptografadas ao ler
+SENSITIVE_KEYS = {'admin_password', 'groq_api_key'}
 
 
 class Cliente(Base):
     __tablename__ = 'clientes'
 
     id = Column(Integer, primary_key=True)
-    telefone = Column(String(20), unique=True, nullable=False, index=True)
+    telefone = Column(String(20), unique=True, nullable=False, index=True)  # JID do WhatsApp
     nome = Column(String(100), default='')
-    estado = Column(String(50), default='inicio')
-    dados = Column(JSON, default=dict)
+    estado = Column(String(50), default='inicio')  # Estado da máquina de estados do menu
+    dados = Column(JSON, default=dict)  # Dados temporários do fluxo de agendamento
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
@@ -27,7 +33,7 @@ class Conversa(Base):
     telefone = Column(String(20), nullable=False, index=True)
     mensagem = Column(Text, nullable=False)
     resposta = Column(Text, default='')
-    tipo = Column(String(20), default='texto')
+    tipo = Column(String(20), default='texto')  # text, image, list_response, button_response, admin
     created_at = Column(DateTime, default=datetime.utcnow)
 
 
@@ -40,11 +46,12 @@ class Agendamento(Base):
     data_hora = Column(DateTime, nullable=False)
     servico = Column(String(100), default='')
     observacao = Column(Text, default='')
-    status = Column(String(20), default='pendente')
+    status = Column(String(20), default='pendente')  # pendente, confirmado, cancelado, concluido
     created_at = Column(DateTime, default=datetime.utcnow)
 
 
 class AdminConfig(Base):
+    # Tabela chave-valor para configurações (admin_password, groq_*, whitelist, etc.)
     __tablename__ = 'admin_config'
 
     id = Column(Integer, primary_key=True)
@@ -54,30 +61,62 @@ class AdminConfig(Base):
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
 
+def ensure_encryption_key(db: Session | None = None):
+    # Garante que ENCRYPTION_KEY esteja disponível: usa do ambiente, do banco, ou gera nova.
+    import os
+    from cryptography.fernet import Fernet
+    key = os.getenv('ENCRYPTION_KEY')
+    if key:
+        return
+    key = get_config('encryption_key', '', db)
+    if key:
+        os.environ['ENCRYPTION_KEY'] = key
+        return
+    key = Fernet.generate_key().decode()
+    set_config('encryption_key', key, db)
+    os.environ['ENCRYPTION_KEY'] = key
+
+
 def init_db():
+    # Cria todas as tabelas se não existirem
     Base.metadata.create_all(bind=engine)
+    # Garante que a chave de criptografia existe (gera e persiste se necessário)
+    ensure_encryption_key()
 
 
 def get_db():
+    # Generator para Dependency Injection do FastAPI. Fecha a sessão automaticamente.
     db = SessionLocal()
     try:
-        return db
+        yield db
     finally:
         db.close()
 
 
-def get_config(key: str, default: str = '') -> str:
-    db = SessionLocal()
+def get_config(key: str, default: str = '', db: Session | None = None) -> str:
+    # Lê config do banco. Se for chave sensível, descriptografa.
+    close = db is None
+    if close:
+        db = SessionLocal()
     try:
         cfg = db.query(AdminConfig).filter_by(key=key).first()
-        return cfg.value if cfg else default
+        val = cfg.value if cfg else default
+        if val and key in SENSITIVE_KEYS:
+            val = decrypt_value(val)
+        return val
     finally:
-        db.close()
+        if close:
+            db.close()
 
 
-def set_config(key: str, value: str):
-    db = SessionLocal()
+def set_config(key: str, value: str, db: Session | None = None):
+    # Salva config no banco. Se for chave sensível, criptografa antes.
+    close = db is None
+    if close:
+        db = SessionLocal()
     try:
+        if key in SENSITIVE_KEYS:
+            value = encrypt_value(value)
         cfg = db.query(AdminConfig).filter_by(key=key).first()
         if cfg:
             cfg.value = value
@@ -85,4 +124,5 @@ def set_config(key: str, value: str):
             db.add(AdminConfig(key=key, value=value))
         db.commit()
     finally:
-        db.close()
+        if close:
+            db.close()

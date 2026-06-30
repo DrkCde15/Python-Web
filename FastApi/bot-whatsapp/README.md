@@ -30,7 +30,12 @@ A arquitetura separa a **conexão com o WhatsApp** (Node.js + Baileys — leve, 
 | 🗄️ **Banco de dados** | SQLite com tabelas para clientes, conversas e agendamentos |
 | 🔄 **Histórico** | Todas as mensagens e respostas são armazenadas |
 | 📊 **Endpoints REST** | Consulta de clientes e agendamentos via API |
-| 🖥️ **Dashboard web** | Painel administrativo com senha para gerenciar tudo |
+| 🖥️ **Dashboard web** | Painel administrativo protegido por senha |
+| 🔒 **Senha hasheada** | Admin password armazenada com bcrypt |
+| 🔐 **API key criptografada** | Chave da Groq criptografada em repouso (Fernet/AES) |
+| 📝 **Validação de entrada** | Schemas Pydantic + validação de JID no gateway |
+| 📋 **Logging estruturado** | structlog (Python) + pino (Node.js) |
+| ✅ **Testes automatizados** | pytest com 13 testes |
 
 ---
 
@@ -53,7 +58,7 @@ Senha:  definida na primeira vez que acessar o dashboard
 | **Agendamentos** | Gerenciar status: confirmar, cancelar, concluir |
 | **Configurações** | IA (API key, modelo), whitelist de números autorizados |
 
-O dashboard é **protegido por senha** — definida na primeira vez que acessar. Todas as credenciais ficam salvas no banco SQLite.
+O dashboard é **protegido por senha** — definida na primeira vez que acessar. A senha é armazenada com **bcrypt** e a chave da API **criptografada** (Fernet).
 
 ---
 
@@ -70,6 +75,7 @@ O dashboard é **protegido por senha** — definida na primeira vez que acessar.
 │  • Gera QR code para autenticação                    │
 │  • API REST para enviar mensagens                    │
 │  • Envia webhooks para o bot                         │
+│  • Logging estruturado (pino)                        │
 │  • Porta 3001                                        │
 └──────────────────┬──────────────────────────────────┘
                    │ HTTP (Webhook + API)
@@ -79,6 +85,10 @@ O dashboard é **protegido por senha** — definida na primeira vez que acessar.
 │  • Gerencia estados do cliente                       │
 │  • Persiste dados no SQLite                          │
 │  • Integração com Groq API                           │
+│  • Dependency Injection (db)                         │
+│  • Validação com Pydantic                            │
+│  • Logging estruturado (structlog)                   │
+│  • Senha hasheada (bcrypt) + chave criptografada     │
 │  • Porta 8000                                        │
 └─────────────────────────────────────────────────────┘
 ```
@@ -110,8 +120,19 @@ pip install -r requirements.txt
 O bot funciona com um `.env` mínimo. As demais configurações (chave da IA, modelo, whitelist) são feitas pelo **dashboard** na primeira vez que você acessar.
 
 ```env
+# bot/.env
 GATEWAY_URL=http://localhost:3001
 DATABASE_URL=sqlite:///./bot.db
+# ENCRYPTION_KEY=     # Opcional. Se não definida, é gerada automaticamente na 1ª execução.
+```
+
+> A chave Fernet é **auto-gerada e persistida no banco** (tabela `admin_config`, chave `encryption_key`) na primeira execução. Você só precisa definir `ENCRYPTION_KEY` no `.env` se quiser usar uma chave fixa (ex: para compartilhar entre múltiplas instâncias).
+
+```env
+# gateway/.env
+PORT=3001
+WEBHOOK_URL=http://localhost:8000/webhook
+LOG_LEVEL=info
 ```
 
 > 💡 **Modelos disponíveis na Groq:** `openai/gpt-oss-120b`, `gemma2-9b-it`, `llama-3.3-70b-versatile`, `mixtral-8x7b-32768`
@@ -127,8 +148,8 @@ Um **QR code** será exibido no terminal. Abra o WhatsApp no celular → Menu �
 
 O gateway está pronto quando aparecer:
 ```
-[Gateway] HTTP server running on port 3001
-[Gateway] Connected as Nome do Contato
+[10:30:00] INFO: gateway_http_started
+[10:30:02] INFO: whatsapp_connected
 ```
 
 ### 4. Iniciar o Bot
@@ -141,11 +162,17 @@ python main.py
 ```
 
 ```
-[Bot] Database initialized
 INFO:     Uvicorn running on http://0.0.0.0:8000
 ```
 
-### 5. Testar
+### 5. Executar testes
+
+```bash
+cd bot
+python -m pytest tests/ -v
+```
+
+### 6. Testar
 
 Envie uma mensagem para o número conectado. O bot responderá com o menu:
 
@@ -171,6 +198,7 @@ Envie uma mensagem para o número conectado. O bot responderá com o menu:
 |---|---|---|---|
 | `GET` | `/health` | Status da conexão | — |
 | `POST` | `/send` | Enviar mensagem de texto | `{ "to": "5511999998888@s.whatsapp.net", "text": "Olá" }` |
+| `POST` | `/send-buttons` | Enviar botões interativos | `{ "to": "...", "text": "...", "buttons": [...] }` |
 | `POST` | `/send-image` | Enviar imagem | `{ "to": "...", "imageUrl": "...", "text": "opcional" }` |
 
 ### Bot (porta 8000)
@@ -182,27 +210,17 @@ Envie uma mensagem para o número conectado. O bot responderá com o menu:
 | `GET` | `/agendamentos` | Listar todos os agendamentos |
 | `POST` | `/admin/login` | Login no dashboard |
 | `GET` | `/admin/` | Dashboard web |
+| `GET` | `/api/setup-status` | Status da configuração |
+| `POST` | `/api/setup` | Configuração inicial |
 | `GET` | `/api/stats` | Estatísticas do sistema |
 | `GET` | `/api/conversas/{telefone}` | Conversas de um cliente |
 | `PUT` | `/api/agendamentos/{id}` | Atualizar status do agendamento |
 | `PUT` | `/api/clientes/{telefone}/nome` | Editar nome do cliente |
 | `GET` | `/api/whitelist` | Listar whitelist |
 | `PUT` | `/api/whitelist` | Atualizar whitelist |
+| `GET` | `/api/settings` | Listar configurações |
+| `PUT` | `/api/settings` | Atualizar configurações |
 | `POST` | `/api/send` | Enviar mensagem manualmente |
-
-Exemplo de resposta de `/clientes`:
-
-```json
-[
-  {
-    "id": 1,
-    "telefone": "5511999998888@s.whatsapp.net",
-    "nome": "",
-    "estado": "inicio",
-    "created_at": "2026-06-30T13:30:00"
-  }
-]
-```
 
 ---
 
@@ -212,7 +230,10 @@ Exemplo de resposta de `/clientes`:
 Usuário envia "Olá"
        │
        ▼
-Gateway recebe → envia webhook POST para /webhook
+Gateway recebe → valida JID → envia webhook POST para /webhook
+       │
+       ▼
+Bot valida payload (Pydantic) → verifica whitelist
        │
        ▼
 Bot verifica estado do cliente no banco
@@ -240,13 +261,14 @@ Gateway entrega a mensagem no WhatsApp
 
 ## 🗃️ Banco de Dados
 
-O SQLite é criado automaticamente em `bot/bot.db` com 3 tabelas:
+O SQLite é criado automaticamente em `bot/bot.db` com 4 tabelas:
 
 | Tabela | Descrição | Campos principais |
 |---|---|---|
 | `clientes` | Dados dos clientes | telefone, nome, estado, dados (JSON) |
 | `conversas` | Histórico de mensagens | telefone, mensagem, resposta, tipo |
 | `agendamentos` | Agendamentos | telefone, nome, data_hora, servico, status |
+| `admin_config` | Config. chave-valor | key, value (valores sensíveis criptografados) |
 
 ---
 
@@ -289,24 +311,31 @@ Regras:
 ```
 bot-whatsapp/
 ├── gateway/                    # 🟢 Conexão WhatsApp
-│   ├── index.js                #    Gateway Baileys + Express
+│   ├── index.js                #    Gateway Baileys + Express + pino
 │   ├── package.json            #    Dependências Node.js
 │   └── .env                    #    Configurações do gateway
 │
 ├── bot/                        # 🔵 Lógica do bot
 │   ├── main.py                 #    FastAPI (webhook + endpoints + dashboard)
-│   ├── config.py               #    Variáveis de ambiente
-│   ├── database.py             #    Modelos SQLite
+│   ├── config.py               #    Variáveis de ambiente + structlog
+│   ├── database.py             #    Modelos SQLite + CRUD + criptografia
+│   ├── security.py             #    bcrypt (senha) + Fernet (API key)
+│   ├── schemas.py              #    Pydantic (validação de entrada)
 │   ├── .env                    #    Chave da API + configurações
 │   ├── requirements.txt        #    Dependências Python
 │   ├── static/
 │   │   └── dashboard.html      #    🖥️ Dashboard administrativo
-│   └── handlers/
+│   ├── handlers/
+│   │   ├── __init__.py
+│   │   ├── menu.py             #    Textos e estados do menu
+│   │   └── ai.py               #    Integração com Groq
+│   └── tests/                  #    Testes automatizados
 │       ├── __init__.py
-│       ├── menu.py             #    Textos e estados do menu
-│       └── ai.py               #    Integração com Groq
+│       ├── conftest.py
+│       ├── test_menu.py        #    9 testes do fluxo de menu
+│       └── test_security.py    #    4 testes de hash/criptografia
 │
-├── app.py                      # (reservado)
+├── .gitignore
 └── README.md
 ```
 
@@ -315,8 +344,10 @@ bot-whatsapp/
 ## ⚠️ Observações
 
 - O Baileys usa o protocolo do WhatsApp Web — o número precisa estar **ativo no WhatsApp** e o celular precisa ter **conexão com internet** para manter o pareamento.
-- Em caso de desconeção, o gateway tenta reconectar automaticamente após 5 segundos.
+- Em caso de desconeção, o gateway tenta reconectar automaticamente após 5 segundos (com proteção contra reconexão paralela).
 - Se o dispositivo for **deslogado**, delete a pasta `gateway/auth_info/` e reinicie o gateway para gerar um novo QR code.
+- `ENCRYPTION_KEY` é **auto-gerada** na primeira execução e persistida no banco SQLite. Você pode sobrescrever definindo a variável no `.env`.
+- Execute os testes com `python -m pytest tests/ -v` dentro da pasta `bot/`.
 
 ---
 
