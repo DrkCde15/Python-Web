@@ -174,7 +174,7 @@ python -m pytest tests/ -v
 
 ### 6. Testar
 
-Envie uma mensagem para o número conectado. O bot responderá com o menu:
+Pegue **outro celular** (ou peça para um amigo) e envie um WhatsApp para o **número que você usou para escanear o QR code**. O bot responderá automaticamente com o menu:
 
 ```
 ╔══════════════════════╗
