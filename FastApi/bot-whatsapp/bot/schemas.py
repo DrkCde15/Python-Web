@@ -39,6 +39,7 @@ class SettingsUpdate(BaseModel):
     groq_api_key: str | None = None
     groq_model: str | None = None
     groq_base_url: str | None = None
+    group_enabled: str | None = None
 
 
 class AgendamentoUpdate(BaseModel):

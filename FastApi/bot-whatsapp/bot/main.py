@@ -8,9 +8,12 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 
 import structlog
-from fastapi import FastAPI, Request, HTTPException, Depends
+from fastapi import FastAPI, Request, HTTPException, Depends, BackgroundTasks
 from fastapi.responses import HTMLResponse
 from httpx import AsyncClient, Limits
+from slowapi import Limiter, _rate_limit_exceeded_handler
+from slowapi.util import get_remote_address
+from slowapi.errors import RateLimitExceeded
 from sqlalchemy.orm import Session
 
 from config import GATEWAY_URL
@@ -45,6 +48,9 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(lifespan=lifespan)
+limiter = Limiter(key_func=get_remote_address, default_limits=["30/minute"])
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 _http = None
 
 
@@ -96,6 +102,7 @@ async def save_conversa(telefone: str, mensagem: str, resposta: str = '', tipo: 
 async def update_cliente_estado(telefone: str, estado: str, dados: dict = None, db: Session = None):
     # Atualiza o estado do cliente na máquina de estados do menu.
     # Opcionalmente mescla dados temporários (ex: nome, serviço, data) no campo JSON.
+    # Quando volta ao estado 'inicio', limpa os dados acumulados.
     close = db is None
     if close:
         db = SessionLocal()
@@ -105,6 +112,8 @@ async def update_cliente_estado(telefone: str, estado: str, dados: dict = None, 
             cliente.estado = estado
             if dados:
                 cliente.dados = {**cliente.dados, **dados}
+            elif estado == 'inicio':
+                cliente.dados = {}
             db.commit()
     finally:
         if close:
@@ -196,45 +205,71 @@ async def processar_menu(telefone: str, texto: str, cliente: Cliente, db: Sessio
     return get_menu_text('inicio')
 
 
+async def processar_webhook_async(from_number: str, text: str, msg_type: str):
+    # Processa a mensagem em background, com sessão própria
+    db = SessionLocal()
+    try:
+        # Ignora mensagens de grupos (@g.us) a menos que configurado
+        if from_number.endswith('@g.us'):
+            group_enabled = get_config('group_enabled', '0', db)
+            if group_enabled != '1':
+                logger.info('group_message_ignored', group=from_number)
+                return
+            logger.info('group_message_processing', group=from_number)
+
+        logger.info('processing_message', from_number=from_number)
+
+        cliente = await get_cliente(from_number, db)
+        await save_conversa(from_number, text, tipo=msg_type, db=db)
+
+        # Decide se processa menu ou delega pra IA
+        if re.match(r'^[0-9]$', text) or text.lower() in ('olá', 'oi', 'ola', 'bom dia', 'boa tarde', 'boa noite', 'menu', 'inicio', '0'):
+            resposta = await processar_menu(from_number, text, cliente, db)
+        else:
+            if cliente.estado == 'falando_bot':
+                resposta = await ask_ai(text)
+            elif cliente.estado == 'falando_atendente':
+                resposta = get_menu_text('falando_atendente')
+            else:
+                resposta = await ask_ai(text)
+                await update_cliente_estado(from_number, 'inicio', db=db)
+
+        # Se o menu retornou None, o texto deve ser processado pela IA
+        if resposta is None:
+            resposta = await ask_ai(text)
+
+        await save_conversa(from_number, text, resposta, 'resposta', db=db)
+        await send_whatsapp(from_number, resposta)
+        logger.info('message_processed', from_number=from_number)
+    except Exception as e:
+        logger.error('webhook_processing_failed', from_number=from_number, error=str(e))
+    finally:
+        db.close()
+
+
 @app.post('/webhook')
-async def webhook(payload: WebhookPayload, db: Session = Depends(get_db)):
-    # Endpoint chamado pelo gateway quando chega uma mensagem nova no WhatsApp
+@limiter.limit("60/minute")
+async def webhook(request: Request, payload: WebhookPayload, background_tasks: BackgroundTasks):
+    # Endpoint chamado pelo gateway quando chega uma mensagem nova no WhatsApp.
+    # Retorna 202 imediatamente e processa em background para não travar o gateway.
     from_number = payload.from_
     text = payload.text.strip()
     msg_type = payload.type or 'text'
 
-    # Verifica whitelist (se ativa)
+    # Verifica whitelist de forma síncrona (rápido)
     number_only = from_number.split('@')[0] if '@' in from_number else from_number
-    whitelist = _get_whitelist(db)
-    whitelist_enabled = get_config('whitelist_enabled', '1', db) == '1'
+    db = SessionLocal()
+    try:
+        whitelist = _get_whitelist(db)
+        whitelist_enabled = get_config('whitelist_enabled', '1', db) == '1'
+        if whitelist_enabled and whitelist and number_only not in whitelist:
+            logger.info('blocked_message', number=number_only)
+            return {'ok': True, 'blocked': True}
+    finally:
+        db.close()
 
-    if whitelist_enabled and whitelist and number_only not in whitelist:
-        logger.info('blocked_message', number=number_only)
-        return {'ok': True, 'blocked': True}
-
-    cliente = await get_cliente(from_number, db)
-    await save_conversa(from_number, text, tipo=msg_type, db=db)
-
-    # Decide se processa menu ou delega pra IA
-    if re.match(r'^[0-9]$', text) or text.lower() in ('olá', 'oi', 'ola', 'bom dia', 'boa tarde', 'boa noite', 'menu', 'inicio', '0'):
-        resposta = await processar_menu(from_number, text, cliente, db)
-    else:
-        if cliente.estado == 'falando_bot':
-            resposta = await ask_ai(text)
-        elif cliente.estado == 'falando_atendente':
-            resposta = get_menu_text('falando_atendente')
-        else:
-            resposta = await ask_ai(text)
-            await update_cliente_estado(from_number, 'inicio', db=db)
-
-    # Se o menu retornou None, o texto deve ser processado pela IA
-    if resposta is None:
-        resposta = await ask_ai(text)
-
-    await save_conversa(from_number, text, resposta, 'resposta', db=db)
-    await send_whatsapp(from_number, resposta)
-
-    return {'ok': True}
+    background_tasks.add_task(processar_webhook_async, from_number, text, msg_type)
+    return {'ok': True, 'queued': True}
 
 
 # ─── Admin / Autenticação ──────────────────────────────────────────
@@ -257,6 +292,13 @@ def _check_auth(request: Request):
     token = auth.replace('Bearer ', '') if auth.startswith('Bearer ') else ''
     if not token or _hash_token(token) not in ADMIN_TOKEN:
         raise HTTPException(status_code=401, detail='Unauthorized')
+    # CSRF: verifica Referer em requisições mutáveis (POST, PUT, DELETE)
+    if request.method in ('POST', 'PUT', 'DELETE', 'PATCH'):
+        referer = request.headers.get('Referer', '')
+        allowed = ['http://localhost:8000', 'http://127.0.0.1:8000']
+        origin = request.headers.get('Origin', '')
+        if origin and origin not in allowed:
+            raise HTTPException(status_code=403, detail='Forbidden: invalid Origin')
     return True
 
 
@@ -411,13 +453,14 @@ async def api_get_settings(request: Request, db: Session = Depends(get_db)):
         'groq_api_key': get_config('groq_api_key', '', db),
         'groq_model': get_config('groq_model', 'grok-2-1212', db),
         'groq_base_url': get_config('groq_base_url', 'https://api.groq.com/openai/v1', db),
+        'group_enabled': get_config('group_enabled', '0', db),
     }
 
 
 @app.put('/api/settings')
 async def api_put_settings(body: SettingsUpdate, request: Request, db: Session = Depends(get_db)):
     _check_auth(request)
-    for key in ('groq_api_key', 'groq_model', 'groq_base_url'):
+    for key in ('groq_api_key', 'groq_model', 'groq_base_url', 'group_enabled'):
         val = getattr(body, key, None)
         if val is not None:
             set_config(key, val, db)

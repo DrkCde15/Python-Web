@@ -36,6 +36,11 @@ A arquitetura separa a **conexão com o WhatsApp** (Node.js + Baileys — leve, 
 | 📝 **Validação de entrada** | Schemas Pydantic + validação de JID no gateway |
 | 📋 **Logging estruturado** | structlog (Python) + pino (Node.js) |
 | ✅ **Testes automatizados** | pytest com 13 testes |
+| 🗄️ **Migrações (Alembic)** | Versionamento do schema do banco |
+| 🛡️ **Rate limiting** | slowapi (Python) + express-rate-limit (Node.js) |
+| 🔄 **Webhook assíncrono** | FastAPI BackgroundTasks + retry exponencial (3 tentativas) |
+| 🚫 **CSRF** | Verificação de Origin/Referer no dashboard |
+| 🧑‍🤝‍🧑 **Grupos** | Suporte opcional a grupos WhatsApp (@g.us, configurável) |
 
 ---
 
@@ -165,7 +170,22 @@ python main.py
 INFO:     Uvicorn running on http://0.0.0.0:8000
 ```
 
-### 5. Executar testes
+### 5. Migrações do banco de dados
+
+As tabelas são criadas automaticamente na primeira execução via **Alembic**. Para gerenciar mudanças futuras no schema:
+
+```bash
+cd bot
+# Gerar uma nova migration (após alterar os modelos em database.py)
+alembic revision --autogenerate -m "descricao"
+
+# Aplicar migrations pendentes
+alembic upgrade head
+```
+
+> O `init_db()` no startup já executa `alembic upgrade head` automaticamente, com fallback para `create_all`.
+
+### 6. Executar testes
 
 ```bash
 cd bot
@@ -233,7 +253,7 @@ Usuário envia "Olá"
 Gateway recebe → valida JID → envia webhook POST para /webhook
        │
        ▼
-Bot valida payload (Pydantic) → verifica whitelist
+Bot valida payload (Pydantic) → verifica whitelist → retorna 202 (assíncrono)
        │
        ▼
 Bot verifica estado do cliente no banco
@@ -261,7 +281,7 @@ Gateway entrega a mensagem no WhatsApp
 
 ## 🗃️ Banco de Dados
 
-O SQLite é criado automaticamente em `bot/bot.db` com 4 tabelas:
+O SQLite é criado automaticamente em `bot/bot.db` com 4 tabelas gerenciadas por **Alembic** (migrations em `bot/alembic/versions/`):
 
 | Tabela | Descrição | Campos principais |
 |---|---|---|
@@ -269,6 +289,8 @@ O SQLite é criado automaticamente em `bot/bot.db` com 4 tabelas:
 | `conversas` | Histórico de mensagens | telefone, mensagem, resposta, tipo |
 | `agendamentos` | Agendamentos | telefone, nome, data_hora, servico, status |
 | `admin_config` | Config. chave-valor | key, value (valores sensíveis criptografados) |
+
+> Para alterar o schema, edite os modelos em `database.py`, gere uma migration com `alembic revision --autogenerate` e aplique com `alembic upgrade head`.
 
 ---
 
@@ -323,6 +345,10 @@ bot-whatsapp/
 │   ├── schemas.py              #    Pydantic (validação de entrada)
 │   ├── .env                    #    Chave da API + configurações
 │   ├── requirements.txt        #    Dependências Python
+│   ├── alembic.ini             #    Config do Alembic
+│   ├── alembic/                #    📦 Migrações do banco
+│   │   ├── env.py              #    Config do ambiente Alembic
+│   │   └── versions/           #    Arquivos de migração
 │   ├── static/
 │   │   └── dashboard.html      #    🖥️ Dashboard administrativo
 │   ├── handlers/
@@ -348,6 +374,9 @@ bot-whatsapp/
 - Se o dispositivo for **deslogado**, delete a pasta `gateway/auth_info/` e reinicie o gateway para gerar um novo QR code.
 - `ENCRYPTION_KEY` é **auto-gerada** na primeira execução e persistida no banco SQLite. Você pode sobrescrever definindo a variável no `.env`.
 - Execute os testes com `python -m pytest tests/ -v` dentro da pasta `bot/`.
+- As migrações de banco são gerenciadas pelo **Alembic**. Após alterar os modelos, rode `alembic revision --autogenerate -m "descricao"` e depois `alembic upgrade head` dentro de `bot/`.
+- O webhook é processado de forma **assíncrona** (BackgroundTasks). O gateway tem **retry exponencial** (3 tentativas: 1s/5s/15s) em caso de falha.
+- O dashboard possui **rate limiting** (30 req/min global no bot, 15 req/min/IP nos endpoints de send do gateway).
 
 ---
 

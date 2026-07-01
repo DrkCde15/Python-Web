@@ -8,6 +8,7 @@ const {
   makeCacheableSignalKeyStore,
 } = require('@whiskeysockets/baileys');
 const express = require('express');
+const rateLimit = require('express-rate-limit');
 const axios = require('axios');
 const qrcode = require('qrcode-terminal');
 const { readFileSync, existsSync } = require('fs');
@@ -39,6 +40,18 @@ function isValidJid(jid) {
 
 const app = express();
 app.use(express.json());
+
+// Rate limiting: protege os endpoints de send contra abuso
+const sendLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 30,
+  message: { error: 'Too many requests, please try again later' },
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+app.use('/send', sendLimiter);
+app.use('/send-buttons', sendLimiter);
+app.use('/send-image', sendLimiter);
 
 // Endpoint de health check: retorna status da conexão WhatsApp
 app.get('/health', (req, res) => {
@@ -162,7 +175,7 @@ async function startBot() {
       printQRInTerminal: false,   // Geramos QR manualmente com qrcode-terminal
       syncFullHistory: false,      // Evita sincronizar histórico completo
       markOnlineOnConnect: true,
-      logger: pino({ level: 'silent' }),  // Desliga log interno do Baileys
+      logger: pino({ level: 'warn' }),  // Log interno do Baileys (warn+ apenas)
     });
 
     // Monitora mudanças na conexão (QR code, conectado, desconectado)
@@ -197,6 +210,34 @@ async function startBot() {
       }
     });
 
+    // Fila interna de webhook com retry exponencial (3 tentativas: 1s, 5s, 15s)
+    const webhookQueue = [];
+    let webhookProcessing = false;
+
+    async function processWebhookQueue() {
+      if (webhookProcessing) return;
+      webhookProcessing = true;
+      while (webhookQueue.length > 0) {
+        const item = webhookQueue.shift();
+        const delays = [1000, 5000, 15000];
+        for (let attempt = 0; attempt <= delays.length; attempt++) {
+          try {
+            await axios.post(WEBHOOK_URL, item.payload, { timeout: 30000 });
+            logger.debug({ from: item.payload.from, attempt }, 'webhook_sent');
+            break;
+          } catch (err) {
+            if (attempt < delays.length) {
+              logger.warn({ from: item.payload.from, attempt, delay: delays[attempt], error: err.message }, 'webhook_retry');
+              await new Promise((r) => setTimeout(r, delays[attempt]));
+            } else {
+              logger.error({ from: item.payload.from, error: err.message }, 'webhook_failed');
+            }
+          }
+        }
+      }
+      webhookProcessing = false;
+    }
+
     // Persiste credenciais atualizadas (mantém sessão ativa)
     sock.ev.on('creds.update', saveCreds);
 
@@ -214,18 +255,16 @@ async function startBot() {
         const from = msg.key.remoteJid;
         const msgType = getMessageType(msg);
 
-        try {
-          await axios.post(WEBHOOK_URL, {
+        webhookQueue.push({
+          payload: {
             from,
             text,
             type: msgType,
             timestamp: msg.messageTimestamp,
             msgId: msg.key.id,
-          }, { timeout: 30000 });
-          logger.debug({ from, type: msgType }, 'webhook_sent');
-        } catch (err) {
-          logger.error({ from, error: err.message }, 'webhook_failed');
-        }
+          }
+        });
+        processWebhookQueue();
       }
     });
   } catch (err) {

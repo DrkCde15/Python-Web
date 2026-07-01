@@ -78,8 +78,14 @@ def ensure_encryption_key(db: Session | None = None):
 
 
 def init_db():
-    # Cria todas as tabelas se não existirem
-    Base.metadata.create_all(bind=engine)
+    # Aplica migrações pendentes via Alembic (fallback para create_all se falhar)
+    try:
+        from alembic.config import Config
+        from alembic import command
+        alembic_cfg = Config('alembic.ini')
+        command.upgrade(alembic_cfg, 'head')
+    except Exception:
+        Base.metadata.create_all(bind=engine)
     # Garante que a chave de criptografia existe (gera e persiste se necessário)
     ensure_encryption_key()
 
