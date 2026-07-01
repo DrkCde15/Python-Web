@@ -12,8 +12,6 @@ DATABASE_URL = os.getenv('DATABASE_URL', 'sqlite:///./bot.db')
 structlog.configure(
     processors=[
         structlog.contextvars.merge_contextvars,
-        structlog.stdlib.filter_by_level,
-        structlog.stdlib.add_logger_name,
         structlog.stdlib.add_log_level,
         structlog.stdlib.PositionalArgumentsFormatter(),
         structlog.processors.TimeStamper(fmt='iso'),

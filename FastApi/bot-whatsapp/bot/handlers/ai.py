@@ -34,7 +34,7 @@ async def get_model() -> str:
     return get_config('groq_model', 'grok-2-1212')
 
 
-async def is_configured() -> bool:
+def is_configured() -> bool:
     return bool(get_config('groq_api_key', ''))
 
 

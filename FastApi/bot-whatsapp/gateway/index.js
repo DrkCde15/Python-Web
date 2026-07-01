@@ -33,7 +33,7 @@ let sock = null;
 let isConnecting = false;  // Flag para evitar múltiplas reconexões simultâneas
 
 // Valida formato do JID do WhatsApp (número@ dominio)
-const JID_RE = /^\d+@s\.whatsapp\.net$/;
+const JID_RE = /^\d+@(s\.whatsapp\.net|lid)$/;
 function isValidJid(jid) {
   return JID_RE.test(jid);
 }
@@ -226,11 +226,17 @@ async function startBot() {
             logger.debug({ from: item.payload.from, attempt }, 'webhook_sent');
             break;
           } catch (err) {
+            const errInfo = {
+              message: err.message,
+              code: err.code,
+              status: err.response?.status,
+              responseData: err.response?.data,
+            };
             if (attempt < delays.length) {
-              logger.warn({ from: item.payload.from, attempt, delay: delays[attempt], error: err.message }, 'webhook_retry');
+              logger.warn({ from: item.payload.from, attempt, delay: delays[attempt], error: errInfo }, 'webhook_retry');
               await new Promise((r) => setTimeout(r, delays[attempt]));
             } else {
-              logger.error({ from: item.payload.from, error: err.message }, 'webhook_failed');
+              logger.error({ from: item.payload.from, error: errInfo }, 'webhook_failed');
             }
           }
         }
@@ -243,17 +249,25 @@ async function startBot() {
 
     // Escuta novas mensagens e encaminha via webhook para o bot Python
     sock.ev.on('messages.upsert', async ({ messages, type }) => {
+      logger.debug({ type, count: messages.length }, 'messages_upsert');
       if (type !== 'notify') return;
 
       for (const msg of messages) {
         if (msg.key.fromMe) continue;       // Ignora mensagens enviadas por nós
         if (!msg.message) continue;
 
-        const text = getMessageContent(msg);
-        if (!text) continue;
-
         const from = msg.key.remoteJid;
+        const text = getMessageContent(msg);
         const msgType = getMessageType(msg);
+        logger.info({ from, text: text?.slice(0, 50), msgType }, 'message_received_raw');
+
+        // Ignora newsletters, broadcasts e status
+        if (from.endsWith('@newsletter') || from.endsWith('@broadcast') || from.endsWith('status@broadcast')) {
+          logger.debug({ from }, 'ignored_non_personal');
+          continue;
+        }
+
+        if (!text) continue;
 
         webhookQueue.push({
           payload: {
