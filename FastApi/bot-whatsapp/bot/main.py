@@ -19,7 +19,7 @@ from sqlalchemy.orm import Session
 from config import GATEWAY_URL
 from database import init_db, get_db, SessionLocal, Cliente, Conversa, Agendamento, get_config, set_config
 from handlers.menu import get_menu_text
-from handlers.ai import ask_ai, is_configured as ai_configured
+from handlers.ai import ask_ai, ask_ai_with_image, transcribe_audio, is_configured as ai_configured
 from security import hash_password, verify_password, encrypt_value, decrypt_value
 from schemas import (
     WebhookPayload,
@@ -205,7 +205,7 @@ async def processar_menu(telefone: str, texto: str, cliente: Cliente, db: Sessio
     return get_menu_text('inicio')
 
 
-async def processar_webhook_async(from_number: str, text: str, msg_type: str):
+async def processar_webhook_async(from_number: str, text: str, msg_type: str, image_base64: str | None = None, audio_base64: str | None = None, mimetype: str | None = None):
     # Processa a mensagem em background, com sessão própria
     db = SessionLocal()
     try:
@@ -222,21 +222,38 @@ async def processar_webhook_async(from_number: str, text: str, msg_type: str):
         cliente = await get_cliente(from_number, db)
         await save_conversa(from_number, text, tipo=msg_type, db=db)
 
-        # Decide se processa menu ou delega pra IA
-        if re.match(r'^[0-9]$', text) or text.lower() in ('olá', 'oi', 'ola', 'bom dia', 'boa tarde', 'boa noite', 'menu', 'inicio', '0'):
-            resposta = await processar_menu(from_number, text, cliente, db)
-        else:
-            if cliente.estado == 'falando_bot':
-                resposta = await ask_ai(text)
-            elif cliente.estado == 'falando_atendente':
-                resposta = get_menu_text('falando_atendente')
-            else:
-                resposta = await ask_ai(text)
-                await update_cliente_estado(from_number, 'inicio', db=db)
+        # Se for imagem, processa com visão da IA
+        if image_base64:
+            logger.info('processing_image_with_vision', from_number=from_number)
+            resposta = await ask_ai_with_image(text, image_base64)
 
-        # Se o menu retornou None, o texto deve ser processado pela IA
-        if resposta is None:
-            resposta = await ask_ai(text)
+        # Se for áudio, transcreve e depois processa o texto transcrito
+        elif audio_base64:
+            logger.info('processing_audio_transcription', from_number=from_number)
+            transcricao = await transcribe_audio(audio_base64, mimetype or 'audio/ogg')
+            if transcricao:
+                text = transcricao
+                await save_conversa(from_number, text, tipo='transcricao', db=db)
+                resposta = await ask_ai(text)
+            else:
+                resposta = 'Desculpe, não consegui entender o áudio. Pode enviar um texto ou tente novamente?'
+
+        else:
+            # Decide se processa menu ou delega pra IA
+            if re.match(r'^[0-9]$', text) or text.lower() in ('olá', 'oi', 'ola', 'bom dia', 'boa tarde', 'boa noite', 'menu', 'inicio', '0'):
+                resposta = await processar_menu(from_number, text, cliente, db)
+            else:
+                if cliente.estado == 'falando_bot':
+                    resposta = await ask_ai(text)
+                elif cliente.estado == 'falando_atendente':
+                    resposta = get_menu_text('falando_atendente')
+                else:
+                    resposta = await ask_ai(text)
+                    await update_cliente_estado(from_number, 'inicio', db=db)
+
+            # Se o menu retornou None, o texto deve ser processado pela IA
+            if resposta is None:
+                resposta = await ask_ai(text)
 
         await save_conversa(from_number, text, resposta, 'resposta', db=db)
         await send_whatsapp(from_number, resposta)
@@ -268,7 +285,7 @@ async def webhook(request: Request, payload: WebhookPayload, background_tasks: B
     finally:
         db.close()
 
-    background_tasks.add_task(processar_webhook_async, from_number, text, msg_type)
+    background_tasks.add_task(processar_webhook_async, from_number, text, msg_type, payload.image, payload.audio, payload.mimetype)
     return {'ok': True, 'queued': True}
 
 

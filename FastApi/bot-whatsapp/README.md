@@ -1,5 +1,5 @@
 <div align="center">
-  <h1>🤖 Bot WhatsApp</h1>
+  <h1>Bot WhatsApp</h1>
   <p><strong>Atendimento automatizado com IA — Baileys + FastAPI + Groq</strong></p>
   <p>
     <img src="https://img.shields.io/badge/Node.js-22.x-339933?logo=node.js&logoColor=white" alt="Node.js">
@@ -12,39 +12,43 @@
 
 ---
 
-## 📋 Sobre
+## Sobre
 
-Bot para atendimento automatizado no WhatsApp com suporte a **menu interativo**, **conversas com IA** (Groq), **agendamento de horários** e **banco de dados** para histórico de clientes.
+Bot para atendimento automatizado no WhatsApp com suporte a **menu interativo**, **conversas com IA** (Groq), **reconhecimento de imagens** (Groq Vision), **transcrição de áudio** (faster-whisper), **agendamento de horários** e **banco de dados** para histórico de clientes.
 
-A arquitetura separa a **conexão com o WhatsApp** (Node.js + Baileys — leve, ~100 MB RAM) da **lógica do bot** (Python + FastAPI), permitindo manutenção independente.
+A arquitetura separa a **conexão com o WhatsApp** (Node.js + Baileys — leve, ~100 MB RAM) da **lógica do bot** (Python + FastAPI), permitindo manutenção independente e hot-reload do bot sem perder a conexão com o WhatsApp.
 
 ---
 
-## ✨ Funcionalidades
+## Funcionalidades
 
 | Funcionalidade | Detalhes |
 |---|---|
-| 🧭 **Menu interativo** | Informações, agendamento, conversa com IA, falar com atendente |
-| 🧠 **IA (Groq)** | Respostas inteligentes usando modelos como `openai/gpt-oss-120b` |
-| 📅 **Agendamento** | Fluxo guia: nome → serviço → data/hora → confirmação |
-| 🗄️ **Banco de dados** | SQLite com tabelas para clientes, conversas e agendamentos |
-| 🔄 **Histórico** | Todas as mensagens e respostas são armazenadas |
-| 📊 **Endpoints REST** | Consulta de clientes e agendamentos via API |
-| 🖥️ **Dashboard web** | Painel administrativo protegido por senha |
-| 🔒 **Senha hasheada** | Admin password armazenada com bcrypt |
-| 🔐 **API key criptografada** | Chave da Groq criptografada em repouso (Fernet/AES) |
-| 📝 **Validação de entrada** | Schemas Pydantic + validação de JID no gateway |
-| 📋 **Logging estruturado** | structlog (Python) + pino (Node.js) |
-| ✅ **Testes automatizados** | pytest com 13 testes |
-| 🗄️ **Migrações (Alembic)** | Versionamento do schema do banco |
-| 🛡️ **Rate limiting** | slowapi (Python) + express-rate-limit (Node.js) |
-| 🔄 **Webhook assíncrono** | FastAPI BackgroundTasks + retry exponencial (3 tentativas) |
-| 🚫 **CSRF** | Verificação de Origin/Referer no dashboard |
-| 🧑‍🤝‍🧑 **Grupos** | Suporte opcional a grupos WhatsApp (@g.us, configurável) |
+| **Menu interativo** | Informações, agendamento, conversa com IA, falar com atendente |
+| **IA (Groq)** | Respostas inteligentes com fallback automático entre modelos |
+| **Visão computacional** | Análise de imagens com Groq Vision (`llama-3.2-11b-vision`) |
+| **Transcrição de áudio** | Áudios do WhatsApp transcritos com faster-whisper (local, gratuito) |
+| **Agendamento** | Fluxo guia: nome → serviço → data/hora → confirmação |
+| **Banco de dados** | SQLite com tabelas para clientes, conversas, agendamentos e cache |
+| **Cache de respostas** | Evita chamadas repetidas à API para perguntas frequentes |
+| **Histórico** | Todas as mensagens e respostas armazenadas |
+| **Endpoints REST** | Consulta de clientes, conversas e agendamentos via API |
+| **Dashboard web** | Painel administrativo protegido por senha |
+| **Senha hasheada** | Admin password armazenada com bcrypt |
+| **API key criptografada** | Chave da Groq criptografada em repouso (Fernet/AES) |
+| **Validação de entrada** | Schemas Pydantic + validação de JID no gateway |
+| **Logging estruturado** | structlog (Python) + pino (Node.js) |
+| **Testes automatizados** | pytest com 13 testes |
+| **Migrações (Alembic)** | Versionamento do schema do banco |
+| **Rate limiting** | slowapi (Python) + express-rate-limit (Node.js) |
+| **Webhook assíncrono** | FastAPI BackgroundTasks + retry exponencial (3 tentativas) |
+| **CSRF** | Verificação de Origin/Referer no dashboard |
+| **Grupos** | Suporte opcional a grupos WhatsApp (@g.us, configurável) |
+| **Whitelist** | Controle de quais números podem interagir com o bot |
 
 ---
 
-## 🖥️ Dashboard Administrativo
+## Dashboard Administrativo
 
 O bot inclui um **painel web** para gerenciar tudo visualmente.
 
@@ -61,46 +65,77 @@ Senha:  definida na primeira vez que acessar o dashboard
 | **Clientes** | Lista com busca, editar nome, ver conversa |
 | **Conversas** | Histórico completo de mensagens + enviar resposta manual |
 | **Agendamentos** | Gerenciar status: confirmar, cancelar, concluir |
-| **Configurações** | IA (API key, modelo), whitelist de números autorizados |
+| **Configurações** | IA (API key, modelo, base URL), whitelist de números autorizados |
 
 O dashboard é **protegido por senha** — definida na primeira vez que acessar. A senha é armazenada com **bcrypt** e a chave da API **criptografada** (Fernet).
 
 ---
 
-## 🏗️ Arquitetura
+## Arquitetura
 
 ```
-┌─────────────────────────────────────────────────────┐
-│                    WhatsApp                          │
-└──────────────────┬──────────────────────────────────┘
-                   │ WebSocket (Baileys)
-┌──────────────────▼──────────────────────────────────┐
-│              Gateway (Node.js)                       │
-│  • Conecta ao WhatsApp via Baileys                   │
-│  • Gera QR code para autenticação                    │
-│  • API REST para enviar mensagens                    │
-│  • Envia webhooks para o bot                         │
-│  • Logging estruturado (pino)                        │
-│  • Porta 3001                                        │
-└──────────────────┬──────────────────────────────────┘
-                   │ HTTP (Webhook + API)
-┌──────────────────▼──────────────────────────────────┐
-│              Bot (Python FastAPI)                    │
-│  • Processa mensagens (menu / IA)                    │
-│  • Gerencia estados do cliente                       │
-│  • Persiste dados no SQLite                          │
-│  • Integração com Groq API                           │
-│  • Dependency Injection (db)                         │
-│  • Validação com Pydantic                            │
-│  • Logging estruturado (structlog)                   │
-│  • Senha hasheada (bcrypt) + chave criptografada     │
-│  • Porta 8000                                        │
-└─────────────────────────────────────────────────────┘
+                         WhatsApp
+                            │ WebSocket (Baileys)
+                    ┌───────▼──────────────────────────┐
+                    │     Gateway (Node.js — 3001)       │
+                    │  • Conexão WhatsApp via Baileys    │
+                    │  • Geração de QR code              │
+                    │  • Download de mídia (imagem/áudio)│
+                    │  • Envio de mensagens (texto/imagem)│
+                    │  • Enfileiramento + retry de webhook│
+                    │  • Logging: pino                   │
+                    └───────────────┬────────────────────┘
+                                    │ HTTP POST (webhook)
+                    ┌───────────────▼────────────────────┐
+                    │      Bot (Python FastAPI — 8000)    │
+                    │  • Processamento de mensagens       │
+                    │  • Máquina de estados do menu       │
+                    │  • Integração Groq (chat + vision)  │
+                    │  • Transcrição de áudio (faster-w)  │
+                    │  • SQLite via SQLAlchemy            │
+                    │  • Cache de respostas (SHA256)      │
+                    │  • Dashboard admin (vanilla JS)     │
+                    │  • Autenticação (bcrypt + token)    │
+                    │  • Logging: structlog               │
+                    └────────────────────────────────────┘
+```
+
+### Fluxo de mensagens
+
+```
+Usuário envia "Olá"
+       │
+       ▼
+Gateway recebe → valida JID → enfileira → POST /webhook
+       │                                          │ retry 3x (1s/5s/15s)
+       ▼                                          ▼
+Bot valida (Pydantic) → whitelist? → 202 (BackgroundTasks)
+       │
+       ▼
+   ┌───┴──────────────────────────────────────────┐
+   │              processar_webhook_async()         │
+   ├───────────────────────────────────────────────┤
+   │  Imagem?  → ask_ai_with_image(text, base64)   │
+   │  Áudio?   → transcribe_audio() → ask_ai()     │
+   │  Texto:                                       │
+   │    ├─ "1".."5" / "menu" → processar_menu()   │
+   │    ├─ estado "falando_bot" → ask_ai()         │
+   │    └─ outro → ask_ai() + reset estado         │
+   └───────────────────────────┬───────────────────┘
+                               │
+                               ▼
+                   Bot → POST /send (gateway)
+                               │
+                               ▼
+                   Gateway → sock.sendMessage()
+                               │
+                               ▼
+                   Usuário recebe resposta no WhatsApp
 ```
 
 ---
 
-## 🚀 Começando
+## Começando
 
 ### Pré-requisitos
 
@@ -122,8 +157,6 @@ pip install -r requirements.txt
 
 ### 2. Configurar
 
-O bot funciona com um `.env` mínimo. As demais configurações (chave da IA, modelo, whitelist) são feitas pelo **dashboard** na primeira vez que você acessar.
-
 ```env
 # bot/.env
 GATEWAY_URL=http://localhost:3001
@@ -140,8 +173,6 @@ WEBHOOK_URL=http://localhost:8000/webhook
 LOG_LEVEL=info
 ```
 
-> 💡 **Modelos disponíveis na Groq:** `openai/gpt-oss-120b`, `gemma2-9b-it`, `llama-3.3-70b-versatile`, `mixtral-8x7b-32768`
-
 ### 3. Iniciar o Gateway (WhatsApp)
 
 ```bash
@@ -152,6 +183,7 @@ npm start
 Um **QR code** será exibido no terminal. Abra o WhatsApp no celular → Menu → Aparelhos conectados → Conectar um dispositivo. Escaneie o QR code.
 
 O gateway está pronto quando aparecer:
+
 ```
 [10:30:00] INFO: gateway_http_started
 [10:30:02] INFO: whatsapp_connected
@@ -169,6 +201,8 @@ python main.py
 ```
 INFO:     Uvicorn running on http://0.0.0.0:8000
 ```
+
+> Na primeira execução, o faster-whisper baixa automaticamente o modelo de transcrição (~150 MB para o modelo `base`) para `~/.cache/faster_whisper/`.
 
 ### 5. Migrações do banco de dados
 
@@ -192,7 +226,7 @@ cd bot
 python -m pytest tests/ -v
 ```
 
-### 6. Testar
+### 7. Testar
 
 Pegue **outro celular** (ou peça para um amigo) e envie um WhatsApp para o **número que você usou para escanear o QR code**. O bot responderá automaticamente com o menu:
 
@@ -201,16 +235,16 @@ Pegue **outro celular** (ou peça para um amigo) e envie um WhatsApp para o **n�
 ║       ATENDIMENTO     ║
 ╚══════════════════════╝
 
-1️⃣ Informações
-2️⃣ Agendar horário
-3️⃣ Falar com o Bot 🤖
-4️⃣ Falar com atendente
-5️⃣ Sair
+1 Informações
+2 Agendar horário
+3 Falar com o Bot 🤖
+4 Falar com atendente
+5 Sair
 ```
 
 ---
 
-## 📡 Endpoints da API
+## Endpoints da API
 
 ### Gateway (porta 3001)
 
@@ -244,57 +278,58 @@ Pegue **outro celular** (ou peça para um amigo) e envie um WhatsApp para o **n�
 
 ---
 
-## 🧠 Fluxo de mensagens
+## Modelos de IA
 
-```
-Usuário envia "Olá"
-       │
-       ▼
-Gateway recebe → valida JID → envia webhook POST para /webhook
-       │
-       ▼
-Bot valida payload (Pydantic) → verifica whitelist → retorna 202 (assíncrono)
-       │
-       ▼
-Bot verifica estado do cliente no banco
-       │
-       ├── Se for número/menu → processa_menu()
-       │     ├── 1 → exibe informações
-       │     ├── 2 → inicia fluxo de agendamento
-       │     ├── 3 → entra em modo conversa (IA)
-       │     ├── 4 → transfere para atendente
-       │     └── 5 → encerra
-       │
-       └── Se for texto livre →
-             ├── Se modo "falando_bot" → IA (mantém estado)
-             ├── Se modo "falando_atendente" → mensagem fixa
-             └── Senão → IA (volta ao menu após resposta)
-       │
-       ▼
-Bot envia resposta via POST /send do gateway
-       │
-       ▼
-Gateway entrega a mensagem no WhatsApp
-```
+### Chat (texto)
+
+| Modelo | Contexto | Observação |
+|---|---|---|
+| `grok-2-1212` | — | Padrão (configurável) |
+| `openai/gpt-oss-120b` | 32K | Primeiro fallback |
+| `gemma2-9b-it` | 8K | Segundo fallback |
+| `llama-3.3-70b-versatile` | 128K | Terceiro fallback |
+| `mixtral-8x7b-32768` | 32K | Quarto fallback |
+
+O modelo primário é configurável no dashboard ou via API. Em caso de falha (exceto 401), o bot tenta automaticamente os modelos de fallback em ordem.
+
+### Visão (imagem)
+
+| Modelo | Uso |
+|---|---|
+| `llama-3.2-11b-vision-preview` | Tentativa principal |
+| `llava-v1.5-7b` | Fallback |
+
+### Transcrição (áudio)
+
+| Modelo | Tamanho | RAM | Qualidade |
+|---|---|---|---|
+| `tiny` | 75 MB | ~1 GB | Básica |
+| `base` | 150 MB | ~1.5 GB | Padrão (recomendado) |
+| `small` | 500 MB | ~2 GB | Boa |
+| `medium` | 1.5 GB | ~5 GB | Muito boa |
+| `large-v3` | 3 GB | ~10 GB | Excelente |
+
+> Configure com a chave `whisper_model` no banco ou via dashboard (em breve). Padrão: `base`. A transcrição roda em CPU com `int8` e não bloqueia o event loop (executa em thread separada).
 
 ---
 
-## 🗃️ Banco de Dados
+## Banco de Dados
 
-O SQLite é criado automaticamente em `bot/bot.db` com 4 tabelas gerenciadas por **Alembic** (migrations em `bot/alembic/versions/`):
+O SQLite é criado automaticamente em `bot/bot.db` com 5 tabelas gerenciadas por **Alembic** (migrations em `bot/alembic/versions/`):
 
 | Tabela | Descrição | Campos principais |
 |---|---|---|
-| `clientes` | Dados dos clientes | telefone, nome, estado, dados (JSON) |
-| `conversas` | Histórico de mensagens | telefone, mensagem, resposta, tipo |
+| `clientes` | Dados dos clientes | telefone, nome, estado (máq. estados), dados (JSON) |
+| `conversas` | Histórico de mensagens | telefone, mensagem, resposta, tipo (texto/imagem/transcricao) |
 | `agendamentos` | Agendamentos | telefone, nome, data_hora, servico, status |
+| `respostas_cache` | Cache de respostas da IA | pergunta, resposta, modelo, hits (contador) |
 | `admin_config` | Config. chave-valor | key, value (valores sensíveis criptografados) |
 
 > Para alterar o schema, edite os modelos em `database.py`, gere uma migration com `alembic revision --autogenerate` e aplique com `alembic upgrade head`.
 
 ---
 
-## 🔧 Personalização
+## Personalização
 
 ### Alterar o menu
 
@@ -317,27 +352,27 @@ Regras:
 - Responda em português brasileiro"""
 ```
 
-### Modelos de IA disponíveis na Groq
+### Alterar o modelo de transcrição
 
-| Modelo | Contexto | Ideal para |
-|---|---|---|
-| `openai/gpt-oss-120b` | 32K | Atendimento geral |
-| `llama-3.3-70b-versatile` | 128K | Respostas detalhadas |
-| `gemma2-9b-it` | 8K | Respostas rápidas |
-| `mixtral-8x7b-32768` | 32K | Conversas longas |
+```bash
+# No banco SQLite diretamente:
+sqlite3 bot.db "UPDATE admin_config SET value='small' WHERE key='whisper_model';"
+```
+
+Ou adicione a chave no código em `_get_whisper_model()` em `bot/handlers/ai.py`.
 
 ---
 
-## 📁 Estrutura do Projeto
+## Estrutura do Projeto
 
 ```
 bot-whatsapp/
-├── gateway/                    # 🟢 Conexão WhatsApp
+├── gateway/                    #  Conexão WhatsApp (Node.js)
 │   ├── index.js                #    Gateway Baileys + Express + pino
 │   ├── package.json            #    Dependências Node.js
 │   └── .env                    #    Configurações do gateway
 │
-├── bot/                        # 🔵 Lógica do bot
+├── bot/                        #  Lógica do bot (Python)
 │   ├── main.py                 #    FastAPI (webhook + endpoints + dashboard)
 │   ├── config.py               #    Variáveis de ambiente + structlog
 │   ├── database.py             #    Modelos SQLite + CRUD + criptografia
@@ -346,16 +381,16 @@ bot-whatsapp/
 │   ├── .env                    #    Chave da API + configurações
 │   ├── requirements.txt        #    Dependências Python
 │   ├── alembic.ini             #    Config do Alembic
-│   ├── alembic/                #    📦 Migrações do banco
+│   ├── alembic/                #    Migrações do banco
 │   │   ├── env.py              #    Config do ambiente Alembic
 │   │   └── versions/           #    Arquivos de migração
 │   ├── static/
-│   │   └── dashboard.html      #    🖥️ Dashboard administrativo
+│   │   └── dashboard.html      #    Dashboard administrativo
 │   ├── handlers/
 │   │   ├── __init__.py
 │   │   ├── menu.py             #    Textos e estados do menu
-│   │   └── ai.py               #    Integração com Groq
-│   └── tests/                  #    Testes automatizados
+│   │   └── ai.py               #    Groq (chat+vision) + faster-whisper
+│   └── tests/
 │       ├── __init__.py
 │       ├── conftest.py
 │       ├── test_menu.py        #    9 testes do fluxo de menu
@@ -367,19 +402,20 @@ bot-whatsapp/
 
 ---
 
-## ⚠️ Observações
+## Observações
 
 - O Baileys usa o protocolo do WhatsApp Web — o número precisa estar **ativo no WhatsApp** e o celular precisa ter **conexão com internet** para manter o pareamento.
-- Em caso de desconeção, o gateway tenta reconectar automaticamente após 5 segundos (com proteção contra reconexão paralela).
+- O gateway tem **auto-reconnect** com proteção contra reconexão paralela — em caso de queda, tenta reconectar após 5 segundos.
 - Se o dispositivo for **deslogado**, delete a pasta `gateway/auth_info/` e reinicie o gateway para gerar um novo QR code.
 - `ENCRYPTION_KEY` é **auto-gerada** na primeira execução e persistida no banco SQLite. Você pode sobrescrever definindo a variável no `.env`.
+- O faster-whisper baixa o modelo automaticamente na primeira transcrição (~150 MB para `base`). O download acontece uma vez e fica cacheado.
 - Execute os testes com `python -m pytest tests/ -v` dentro da pasta `bot/`.
 - As migrações de banco são gerenciadas pelo **Alembic**. Após alterar os modelos, rode `alembic revision --autogenerate -m "descricao"` e depois `alembic upgrade head` dentro de `bot/`.
 - O webhook é processado de forma **assíncrona** (BackgroundTasks). O gateway tem **retry exponencial** (3 tentativas: 1s/5s/15s) em caso de falha.
-- O dashboard possui **rate limiting** (30 req/min global no bot, 15 req/min/IP nos endpoints de send do gateway).
+- O bot tem **hot-reload** ativado (`uvicorn --reload`) — alterações no código Python são detectadas automaticamente, sem necessidade de reiniciar o servidor.
 
 ---
 
-## 📄 Licença
+## Licença
 
 MIT

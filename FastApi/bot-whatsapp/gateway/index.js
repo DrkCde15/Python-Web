@@ -6,6 +6,7 @@ const {
   useMultiFileAuthState,
   DisconnectReason,
   makeCacheableSignalKeyStore,
+  downloadContentFromMessage,
 } = require('@whiskeysockets/baileys');
 const express = require('express');
 const rateLimit = require('express-rate-limit');
@@ -146,6 +147,7 @@ function getMessageContent(msg) {
 function getMessageType(msg) {
   if (msg.message?.conversation || msg.message?.extendedTextMessage) return 'text';
   if (msg.message?.imageMessage) return 'image';
+  if (msg.message?.audioMessage) return 'audio';
   if (msg.message?.listResponseMessage) return 'list_response';
   if (msg.message?.buttonsResponseMessage) return 'button_response';
   return 'unknown';
@@ -247,6 +249,36 @@ async function startBot() {
     // Persiste credenciais atualizadas (mantém sessão ativa)
     sock.ev.on('creds.update', saveCreds);
 
+    // Baixa uma imagem e retorna como base64
+    async function downloadImageBase64(msg) {
+      try {
+        const stream = await downloadContentFromMessage(msg.message.imageMessage, 'image');
+        const chunks = [];
+        for await (const chunk of stream) {
+          chunks.push(chunk);
+        }
+        return Buffer.concat(chunks).toString('base64');
+      } catch (err) {
+        logger.error({ error: err.message }, 'image_download_failed');
+        return null;
+      }
+    }
+
+    // Baixa um áudio e retorna como base64
+    async function downloadAudioBase64(msg) {
+      try {
+        const stream = await downloadContentFromMessage(msg.message.audioMessage, 'audio');
+        const chunks = [];
+        for await (const chunk of stream) {
+          chunks.push(chunk);
+        }
+        return Buffer.concat(chunks).toString('base64');
+      } catch (err) {
+        logger.error({ error: err.message }, 'audio_download_failed');
+        return null;
+      }
+    }
+
     // Escuta novas mensagens e encaminha via webhook para o bot Python
     sock.ev.on('messages.upsert', async ({ messages, type }) => {
       logger.debug({ type, count: messages.length }, 'messages_upsert');
@@ -257,9 +289,9 @@ async function startBot() {
         if (!msg.message) continue;
 
         const from = msg.key.remoteJid;
-        const text = getMessageContent(msg);
+        const text = getMessageContent(msg) || '';
         const msgType = getMessageType(msg);
-        logger.info({ from, text: text?.slice(0, 50), msgType }, 'message_received_raw');
+        logger.info({ from, text: text.slice(0, 50), msgType }, 'message_received_raw');
 
         // Ignora newsletters, broadcasts e status
         if (from.endsWith('@newsletter') || from.endsWith('@broadcast') || from.endsWith('status@broadcast')) {
@@ -267,13 +299,41 @@ async function startBot() {
           continue;
         }
 
-        if (!text) continue;
+        // Se for imagem, baixa e converte para base64
+        let imageBase64 = null;
+        if (msgType === 'image') {
+          imageBase64 = await downloadImageBase64(msg);
+          if (imageBase64) {
+            logger.info({ from }, 'image_downloaded_base64');
+          } else {
+            logger.warn({ from }, 'image_download_failed_skipping');
+          }
+        }
+
+        // Se for áudio, baixa e converte para base64
+        let audioBase64 = null;
+        let audioMimetype = null;
+        if (msgType === 'audio') {
+          audioBase64 = await downloadAudioBase64(msg);
+          if (audioBase64) {
+            audioMimetype = msg.message.audioMessage?.mimetype || 'audio/ogg';
+            logger.info({ from, mimetype: audioMimetype }, 'audio_downloaded_base64');
+          } else {
+            logger.warn({ from }, 'audio_download_failed_skipping');
+          }
+        }
+
+        // Se não tem texto, imagem nem áudio, ignora
+        if (!text && !imageBase64 && !audioBase64) continue;
 
         webhookQueue.push({
           payload: {
             from,
             text,
             type: msgType,
+            image: imageBase64,
+            audio: audioBase64,
+            mimetype: audioMimetype,
             timestamp: msg.messageTimestamp,
             msgId: msg.key.id,
           }

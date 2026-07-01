@@ -5,8 +5,11 @@ from pydantic import BaseModel, Field
 class WebhookPayload(BaseModel):
     # Mensagem recebida do gateway. O alias 'from' mapeia o campo JSON "from" para "from_".
     from_: str = Field(..., alias='from', min_length=1)
-    text: str = Field(..., min_length=1)
+    text: str = ''
     type: str = 'text'
+    image: str | None = None  # base64 da imagem (presente se type == 'image')
+    audio: str | None = None  # base64 do áudio (presente se type == 'audio')
+    mimetype: str | None = None  # MIME type do áudio (ex: audio/ogg)
     timestamp: int | None = None
     msgId: str | None = None
 
