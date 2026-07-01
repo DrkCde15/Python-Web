@@ -50,6 +50,59 @@ class Agendamento(Base):
     created_at = Column(DateTime, default=datetime.utcnow)
 
 
+class RespostaCache(Base):
+    # Cache de respostas da IA para perguntas frequentes (evita chamadas repetidas à API)
+    __tablename__ = 'respostas_cache'
+
+    id = Column(Integer, primary_key=True)
+    key = Column(String(64), unique=True, nullable=False, index=True)  # SHA256 da pergunta normalizada
+    pergunta = Column(Text, nullable=False)
+    resposta = Column(Text, nullable=False)
+    model = Column(String(50), default='')
+    created_at = Column(DateTime, default=datetime.utcnow)
+    hits = Column(Integer, default=1)  # Contador de quantas vezes foi reusada
+
+
+def get_cache_response(pergunta: str, db: Session | None = None) -> str | None:
+    # Retorna resposta em cache se existir, ou None. Incrementa contador de hits.
+    import hashlib
+    key = hashlib.sha256(pergunta.strip().lower().encode()).hexdigest()
+    close = db is None
+    if close:
+        db = SessionLocal()
+    try:
+        cached = db.query(RespostaCache).filter_by(key=key).first()
+        if cached:
+            cached.hits = (cached.hits or 1) + 1
+            db.commit()
+            return cached.resposta
+        return None
+    finally:
+        if close:
+            db.close()
+
+
+def set_cache_response(pergunta: str, resposta: str, model: str = '', db: Session | None = None):
+    # Armazena resposta no cache (upsert pela chave hash)
+    import hashlib
+    key = hashlib.sha256(pergunta.strip().lower().encode()).hexdigest()
+    close = db is None
+    if close:
+        db = SessionLocal()
+    try:
+        cached = db.query(RespostaCache).filter_by(key=key).first()
+        if cached:
+            cached.resposta = resposta
+            cached.model = model
+            cached.pergunta = pergunta
+        else:
+            db.add(RespostaCache(key=key, pergunta=pergunta, resposta=resposta, model=model))
+        db.commit()
+    finally:
+        if close:
+            db.close()
+
+
 class AdminConfig(Base):
     # Tabela chave-valor para configurações (admin_password, groq_*, whitelist, etc.)
     __tablename__ = 'admin_config'
