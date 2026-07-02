@@ -278,9 +278,11 @@ async def webhook(request: Request, payload: WebhookPayload, background_tasks: B
     db = SessionLocal()
     try:
         whitelist = _get_whitelist(db)
+        # Normaliza cada entrada da whitelist: remove sufixos @lid / @s.whatsapp.net
+        whitelist_normalized = {n.split('@')[0] if '@' in n else n for n in whitelist}
         whitelist_enabled = get_config('whitelist_enabled', '1', db) == '1'
-        if whitelist_enabled and whitelist and number_only not in whitelist:
-            logger.info('blocked_message', number=number_only)
+        if whitelist_enabled and whitelist_normalized and number_only not in whitelist_normalized:
+            logger.info('blocked_message', number=number_only, whitelist=whitelist_normalized)
             return {'ok': True, 'blocked': True}
     finally:
         db.close()

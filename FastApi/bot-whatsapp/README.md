@@ -44,7 +44,31 @@ A arquitetura separa a **conexão com o WhatsApp** (Node.js + Baileys — leve, 
 | **Webhook assíncrono** | FastAPI BackgroundTasks + retry exponencial (3 tentativas) |
 | **CSRF** | Verificação de Origin/Referer no dashboard |
 | **Grupos** | Suporte opcional a grupos WhatsApp (@g.us, configurável) |
-| **Whitelist** | Controle de quais números podem interagir com o bot |
+| **Whitelist** | Controle de quais números podem interagir com o bot — fora da lista são ignorados |
+
+---
+
+## Whitelist (Lista de Autorizados)
+
+A whitelist controla **quem pode falar com o bot**. Quando ativada, apenas números cadastrados são processados — os demais recebem `blocked: true` e são ignorados.
+
+### Como funciona
+
+- A whitelist armazena apenas o **número** (sem `@s.whatsapp.net` ou `@lid`), ex: `5511999998888`
+- Para contas **normais** (WhatsApp no celular), o número antes do `@s.whatsapp.net` **é** o telefone — a whitelist funciona direto
+- Para **dispositivos vinculados** (Lid), o identificador `@lid` é opaco e **não** corresponde ao número real. Nesse caso, é necessário adicionar o Lid ID (número antes do `@lid`) na whitelist
+
+### Formato correto
+
+```
+5511999998888         # numero internacional sem + e sem @
+126186290155742       # Lid ID (para dispositivos vinculados)
+```
+
+### Gerenciamento
+
+- **Dashboard**: Aba Configurações → campo Whitelist (um número por linha ou separado por vírgula)
+- **Desativar**: Marque "Whitelist Ativada" como off no dashboard, ou no banco: `UPDATE admin_config SET value='0' WHERE key='whitelist_enabled'`
 
 ---
 
