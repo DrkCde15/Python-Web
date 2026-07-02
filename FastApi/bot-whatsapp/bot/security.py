@@ -7,9 +7,7 @@ import bcrypt
 from cryptography.fernet import Fernet
 from dotenv import load_dotenv
 
-
 load_dotenv()
-
 
 def _get_fernet() -> Fernet | None:
     # Lê a chave do ambiente a cada chamada (permite mock em testes)

@@ -3,8 +3,12 @@ import base64
 import asyncio
 import tempfile
 import os
+import logging
 from openai import AsyncOpenAI
 from database import get_config, get_cache_response, set_cache_response
+
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 _client = None
 _cached_key = ''
@@ -68,11 +72,12 @@ INFORMAÇÕES DA EMPRESA:
 - Telefone urgência: (11) 99999-8888
 
 MENU PRINCIPAL (quando aplicável, lembre o cliente das opções):
-1️⃣ Informações
-2️⃣ Agendar horário
-3️⃣ Falar com o Bot 🤖
-4️⃣ Falar com atendente
-5️⃣ Sair
+1️⃣ *Informações*
+2️⃣ *Agendar horário*
+3️⃣ *Falar com o Bot* 🤖
+4️⃣ *Falar com atendente*
+5️⃣ *Abrir chamado* 🎯
+6️⃣ *Sair*
 
 EXEMPLOS DE ATENDIMENTO:
 

@@ -20,6 +20,7 @@ from config import GATEWAY_URL
 from database import init_db, get_db, SessionLocal, Cliente, Conversa, Agendamento, get_config, set_config
 from handlers.menu import get_menu_text
 from handlers.ai import ask_ai, ask_ai_with_image, transcribe_audio, is_configured as ai_configured
+from handlers.taky import create_task
 from security import hash_password, verify_password, encrypt_value, decrypt_value
 from schemas import (
     WebhookPayload,
@@ -140,6 +141,12 @@ async def processar_menu(telefone: str, texto: str, cliente: Cliente, db: Sessio
             await update_cliente_estado(telefone, 'falando_atendente', db=db)
             return get_menu_text('falando_atendente')
         elif texto_clean == '5':
+            await update_cliente_estado(telefone, 'chamado_titulo', db=db)
+            return get_menu_text('chamado_titulo')
+        elif texto_clean == '6':
+            await update_cliente_estado(telefone, 'reuniao_titulo', db=db)
+            return get_menu_text('reuniao_titulo')
+        elif texto_clean == '7':
             return 'Obrigado pelo contato! 😊 Estamos sempre à disposição. Digite *Olá* quando precisar.'
         else:
             return get_menu_text('inicio')
@@ -196,6 +203,80 @@ async def processar_menu(telefone: str, texto: str, cliente: Cliente, db: Sessio
             await update_cliente_estado(telefone, 'inicio', db=db)
             return get_menu_text('inicio')
         return None  # None sinaliza que o texto deve ser enviado à IA
+
+    # Fluxo 'Abrir chamado': título → descrição → confirmar → Taky
+    if cliente.estado == 'chamado_titulo':
+        dados = {'titulo': texto}
+        await update_cliente_estado(telefone, 'chamado_descricao', dados, db)
+        return get_menu_text('chamado_descricao')
+
+    if cliente.estado == 'chamado_descricao':
+        dados = {**cliente.dados, 'descricao': texto}
+        await update_cliente_estado(telefone, 'chamado_confirmar', dados, db)
+        return get_menu_text('chamado_confirmar', dados)
+
+    if cliente.estado == 'chamado_confirmar':
+        if texto_clean == '1':
+            task_id = await create_task(
+                cliente.dados.get('titulo', ''),
+                cliente.dados.get('descricao', ''),
+                telefone,
+            )
+            await update_cliente_estado(telefone, 'chamado_sucesso', db=db)
+            if task_id:
+                return get_menu_text('chamado_sucesso')
+            return get_menu_text('chamado_sucesso') + '\n\n⚠️ Não foi possível conectar ao sistema de chamados. Seu registro foi salvo e será processado em breve.'
+        else:
+            await update_cliente_estado(telefone, 'chamado_cancelado', db=db)
+            return get_menu_text('chamado_cancelado')
+
+    if cliente.estado == 'chamado_sucesso':
+        if texto_clean in ('0', 'menu', 'inicio'):
+            await update_cliente_estado(telefone, 'inicio', db=db)
+            return get_menu_text('inicio')
+        return get_menu_text('chamado_sucesso')
+
+    if cliente.estado == 'chamado_cancelado':
+        if texto_clean in ('0', 'menu', 'inicio'):
+            await update_cliente_estado(telefone, 'inicio', db=db)
+            return get_menu_text('inicio')
+        return get_menu_text('chamado_cancelado')
+
+    # Fluxo 'Agendar reunião': assunto → data → confirmar
+    if cliente.estado == 'reuniao_titulo':
+        dados = {'titulo': texto}
+        await update_cliente_estado(telefone, 'reuniao_data', dados, db)
+        return get_menu_text('reuniao_data')
+
+    if cliente.estado == 'reuniao_data':
+        dados = {**cliente.dados, 'data_hora': texto}
+        await update_cliente_estado(telefone, 'reuniao_confirmar', dados, db)
+        return get_menu_text('reuniao_confirmar', dados)
+
+    if cliente.estado == 'reuniao_confirmar':
+        if texto_clean == '1':
+            task_id = await create_task(
+                f'[Reunião] {cliente.dados.get("titulo", "")}',
+                f'Reunião agendada para: {cliente.dados.get("data_hora", "")}',
+                telefone,
+            )
+            await update_cliente_estado(telefone, 'reuniao_sucesso', db=db)
+            return get_menu_text('reuniao_sucesso')
+        else:
+            await update_cliente_estado(telefone, 'reuniao_cancelado', db=db)
+            return get_menu_text('reuniao_cancelado')
+
+    if cliente.estado == 'reuniao_sucesso':
+        if texto_clean in ('0', 'menu', 'inicio'):
+            await update_cliente_estado(telefone, 'inicio', db=db)
+            return get_menu_text('inicio')
+        return get_menu_text('reuniao_sucesso')
+
+    if cliente.estado == 'reuniao_cancelado':
+        if texto_clean in ('0', 'menu', 'inicio'):
+            await update_cliente_estado(telefone, 'inicio', db=db)
+            return get_menu_text('inicio')
+        return get_menu_text('reuniao_cancelado')
 
     # Modo 'falando_atendente': mostra mensagem fixa de transferência
     if cliente.estado == 'falando_atendente':

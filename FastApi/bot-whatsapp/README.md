@@ -14,7 +14,7 @@
 
 ## Sobre
 
-Bot para atendimento automatizado no WhatsApp com suporte a **menu interativo**, **conversas com IA** (Groq), **reconhecimento de imagens** (Groq Vision), **transcrição de áudio** (faster-whisper), **agendamento de horários** e **banco de dados** para histórico de clientes.
+Bot para atendimento automatizado no WhatsApp com suporte a **menu interativo**, **conversas com IA** (Groq), **reconhecimento de imagens** (Groq Vision), **transcrição de áudio** (faster-whisper), **agendamento de serviços**, **abertura de chamados técnicos**, **agendamento de reuniões** e **banco de dados** para histórico de clientes.
 
 A arquitetura separa a **conexão com o WhatsApp** (Node.js + Baileys — leve, ~100 MB RAM) da **lógica do bot** (Python + FastAPI), permitindo manutenção independente e hot-reload do bot sem perder a conexão com o WhatsApp.
 
@@ -24,11 +24,14 @@ A arquitetura separa a **conexão com o WhatsApp** (Node.js + Baileys — leve, 
 
 | Funcionalidade | Detalhes |
 |---|---|
-| **Menu interativo** | Informações, agendamento, conversa com IA, falar com atendente |
+| **Menu interativo** | Informações, agendamento, chat com IA, abertura de chamados, reuniões |
 | **IA (Groq)** | Respostas inteligentes com fallback automático entre modelos |
 | **Visão computacional** | Análise de imagens com Groq Vision (`llama-3.2-11b-vision`) |
 | **Transcrição de áudio** | Áudios do WhatsApp transcritos com faster-whisper (local, gratuito) |
-| **Agendamento** | Fluxo guia: nome → serviço → data/hora → confirmação |
+| **Agendamento (opção 2)** | Para clientes que querem contratar um serviço. Fluxo: nome → serviço → data. Salvo na tabela `agendamentos` |
+| **Abrir chamado (opção 5)** | Para clientes que precisam de um desenvolvimento ou solução. Vira uma tarefa no Kanban (Taky) |
+| **Agendar reunião (opção 6)** | Para clientes que querem conversar com o time. Vira uma tarefa `[Reunião]` no Kanban (Taky) |
+| **Integração Taky** | Chamados e reuniões viram tarefas no Kanban de projetos |
 | **Banco de dados** | SQLite com tabelas para clientes, conversas, agendamentos e cache |
 | **Cache de respostas** | Evita chamadas repetidas à API para perguntas frequentes |
 | **Histórico** | Todas as mensagens e respostas armazenadas |
@@ -142,9 +145,9 @@ Bot valida (Pydantic) → whitelist? → 202 (BackgroundTasks)
    │  Imagem?  → ask_ai_with_image(text, base64)   │
    │  Áudio?   → transcribe_audio() → ask_ai()     │
    │  Texto:                                       │
-   │    ├─ "1".."5" / "menu" → processar_menu()   │
-   │    ├─ estado "falando_bot" → ask_ai()         │
-   │    └─ outro → ask_ai() + reset estado         │
+    │    ├─ "1".."7" / "menu" → processar_menu()   │
+    │    ├─ estado "falando_bot" → ask_ai()         │
+    │    └─ outro → ask_ai() + reset estado         │
    └───────────────────────────┬───────────────────┘
                                │
                                ▼
@@ -263,8 +266,22 @@ Pegue **outro celular** (ou peça para um amigo) e envie um WhatsApp para o **n�
 2 Agendar horário
 3 Falar com o Bot 🤖
 4 Falar com atendente
-5 Sair
+5 Abrir chamado 🎯
+6 Agendar reunião 📅
+7 Sair
 ```
+
+### Opções do menu
+
+| Opção | Nome | Para quem | O que gera |
+|---|---|---|---|
+| **1** | Informações | Qualquer cliente | Resposta automática com horários, pagamentos, contato |
+| **2** | Agendar horário | Cliente que quer **contratar um serviço** (ex: design, consultoria) | Registro na tabela `agendamentos` |
+| **3** | Falar com o Bot | Cliente que quer tirar dúvidas ou conversar | Resposta da IA (Groq) com histórico |
+| **4** | Falar com atendente | Cliente que quer falar com um humano | Mensagem fixa de transferência |
+| **5** | Abrir chamado | Cliente que precisa de **um desenvolvimento ou solução** | Tarefa no Kanban (Taky) |
+| **6** | Agendar reunião | Cliente que quer **conversar com o time** sobre um projeto | Tarefa `[Reunião]` no Kanban (Taky) |
+| **7** | Sair | Cliente que quer encerrar | Mensagem de despedida |
 
 ---
 
@@ -387,6 +404,33 @@ Ou adicione a chave no código em `_get_whisper_model()` em `bot/handlers/ai.py`
 
 ---
 
+## Integração com Taky (Kanban)
+
+O bot pode criar **chamados** e **reuniões** como tarefas no [Taky](https://github.com/anomalyco/taky) — um sistema de gerenciamento de projetos no estilo Kanban.
+
+### Configuração
+
+As credenciais são armazenadas no banco (`admin_config`) e podem ser gerenciadas via dashboard:
+
+| Chave | Descrição |
+|---|---|
+| `taky_api_url` | URL base do backend Taky (ex: `http://localhost:8000`) |
+| `taky_email` | E-mail de admin do Taky |
+| `taky_password` | Senha do admin do Taky |
+| `taky_default_project_id` | ID do projeto onde as tarefas serão criadas |
+| `taky_default_user_id` | ID do usuário que será o responsável padrão |
+
+### Fluxo
+
+1. Cliente seleciona **5 - Abrir chamado** ou **6 - Agendar reunião**
+2. Bot coleta título, descrição/data e confirma
+3. Bot autentica na API do Taky e cria uma tarefa via `POST /tasks`
+4. Cliente recebe confirmação no WhatsApp
+
+> Se o Taky não estiver configurado, o bot aceita o chamado/reunião e exibe um aviso.
+
+---
+
 ## Estrutura do Projeto
 
 ```
@@ -413,7 +457,8 @@ bot-whatsapp/
 │   ├── handlers/
 │   │   ├── __init__.py
 │   │   ├── menu.py             #    Textos e estados do menu
-│   │   └── ai.py               #    Groq (chat+vision) + faster-whisper
+│   │   ├── ai.py               #    Groq (chat+vision) + faster-whisper
+│   │   └── taky.py             #    Integração com Taky (tarefas)
 │   └── tests/
 │       ├── __init__.py
 │       ├── conftest.py
